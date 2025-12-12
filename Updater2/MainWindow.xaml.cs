@@ -102,10 +102,50 @@ namespace DS4Updater
             }
         }
 
+        private void MainWindow_SourceInitialized(object sender, EventArgs e)
+        {
+            try
+            {
+                var hwndSource = PresentationSource.FromVisual(this) as System.Windows.Interop.HwndSource;
+                if (hwndSource != null)
+                {
+                    hwndSource.AddHook(WndProc);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogException(ex, "MainWindow_SourceInitialized");
+            }
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_DPICHANGED = 0x02E0;
+            if (msg == WM_DPICHANGED)
+            {
+                try
+                {
+                    // lParam is a RECT* with suggested new window position in device pixels
+                    // We can resize the window appropriately; WPF will usually handle DPI, but ensure layout updates
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        this.InvalidateVisual();
+                        this.UpdateLayout();
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogException(ex, "WndProc_DPICHANGED");
+                }
+            }
+            return IntPtr.Zero;
+        }
+
 
         public MainWindow()
         {
             InitializeComponent();
+            this.SourceInitialized += MainWindow_SourceInitialized;
 
             Logger.Log($"Startup: args={string.Join(' ', Environment.GetCommandLineArgs())}");
 
@@ -130,7 +170,7 @@ namespace DS4Updater
 
                 if (isCi)
                 {
-                    label1.Content = "Please re-run with admin rights";
+                    label1.Text = "Please re-run with admin rights";
                     UpdaterResult.ExitCode = 3;
                     UpdaterResult.Message = "admin_required";
                     Logger.Log("Admin required (no elevation): exiting with admin_required");
@@ -170,7 +210,7 @@ namespace DS4Updater
                         catch (System.ComponentModel.Win32Exception ex)
                         {
                             // User refused elevation or an error occurred
-                            label1.Content = "Elevation was cancelled or failed";
+                            label1.Text = "Elevation was cancelled or failed";
                             UpdaterResult.ExitCode = 3;
                             UpdaterResult.Message = "admin_required";
                             Logger.Log("Admin required (elevation cancelled or failed)");
@@ -180,7 +220,7 @@ namespace DS4Updater
                     }
                     else
                     {
-                        label1.Content = "Please re-run with admin rights";
+                        label1.Text = "Please re-run with admin rights";
                         UpdaterResult.ExitCode = 3;
                         UpdaterResult.Message = "admin_required";
                         Logger.Log("User declined elevation");
@@ -212,7 +252,7 @@ namespace DS4Updater
 
                     updatesFolder = Path.Combine(ds4WindowsDir, "Updates");
                 }
-                catch (IOException ex) { Logger.LogException(ex, "CannotSaveDownload"); label1.Content = "Cannot save download at this time"; UpdaterResult.ExitCode = 4; UpdaterResult.Message = "cannot_save_download"; return; }
+                catch (IOException ex) { Logger.LogException(ex, "CannotSaveDownload"); label1.Text = "Cannot save download at this time"; UpdaterResult.ExitCode = 4; UpdaterResult.Message = "cannot_save_download"; return; }
 
                 if (File.Exists(Path.Combine(ds4WindowsDir, "Profiles.xml")))
                     path = ds4WindowsDir;
@@ -241,7 +281,7 @@ namespace DS4Updater
                 }
                 else if (!downloading)
                 {
-                    label1.Content = "DS4Windows is up to date";
+                    label1.Text = "DS4Windows is up to date";
                     UpdaterResult.ExitCode = 0;
                     UpdaterResult.Message = "up_to_date";
                     Logger.Log("No update required: up_to_date");
@@ -328,7 +368,7 @@ namespace DS4Updater
                     {
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            label1.Content = "Could not download update";
+                            label1.Text = "Could not download update";
                             UpdaterResult.ExitCode = 2;
                             UpdaterResult.Message = "download_failed";
                             Logger.Log($"Download failed (StartAppArchiveDownload) for url={url}");
@@ -343,7 +383,7 @@ namespace DS4Updater
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        label1.Content = "Could not download update";
+                        label1.Text = "Could not download update";
                         UpdaterResult.ExitCode = 2;
                         UpdaterResult.Message = "download_failed";
                         Logger.Log($"Download failed (StartAppArchiveDownload catch) for url={url}");
@@ -351,7 +391,7 @@ namespace DS4Updater
                         try { btnRetry.Visibility = Visibility.Visible; } catch { }
                     });
                 }
-                catch (Exception e) { Logger.LogException(e, "StartAppArchiveDownload_General"); Application.Current.Dispatcher.Invoke(() => { label1.Content = e.Message; }); }
+                catch (Exception e) { Logger.LogException(e, "StartAppArchiveDownload_General"); Application.Current.Dispatcher.Invoke(() => { label1.Text = e.Message; }); }
                 //wc.DownloadFileCompleted += wc_DownloadFileCompleted;
                 //wc.DownloadProgressChanged += wc_DownloadProgressChanged;
             });
@@ -365,7 +405,7 @@ namespace DS4Updater
             //Sorry other devs, gonna have to find your own server
             downloading = true;
 
-            label1.Content = "Getting Update info";
+            label1.Text = "Getting Update info";
             _ = Task.Run(async () =>
             {
                 try
@@ -390,7 +430,7 @@ namespace DS4Updater
                     {
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            label1.Content = "Could not download update";
+                            label1.Text = "Could not download update";
                             try { btnRetry.Visibility = Visibility.Visible; } catch { }
                         });
                     }
@@ -402,7 +442,7 @@ namespace DS4Updater
                     Logger.LogException(e, "StartVersionFileDownload_HttpRequestException");
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        label1.Content = "Could not download update";
+                        label1.Text = "Could not download update";
                         try { btnRetry.Visibility = Visibility.Visible; } catch { }
                     });
                 }
@@ -465,7 +505,7 @@ namespace DS4Updater
                     }
                     catch (Exception ec)
                     {
-                        Application.Current.Dispatcher.BeginInvoke(() => { label1.Content = ec.Message; });
+                        Application.Current.Dispatcher.BeginInvoke(() => { label1.Text = ec.Message; });
                     }
                     //});
                 };
@@ -475,7 +515,7 @@ namespace DS4Updater
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    label1.Content = "DS4Windows is up to date";
+                    label1.Text = "DS4Windows is up to date";
                 });
 
                 try
@@ -489,7 +529,7 @@ namespace DS4Updater
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        label1.Content = "Launching DS4Windows soon";
+                        label1.Text = "Launching DS4Windows soon";
                         btnOpenDS4.IsEnabled = false;
                     });
 
@@ -535,8 +575,8 @@ namespace DS4Updater
             if (e.ExpectedBytes > 1024 * 1024 * 5) convertedtotal = (int)(e.ExpectedBytes / 1024d / 1024d) + "MB";
             else convertedtotal = (int)(e.ExpectedBytes / 1024d) + "kB";
 
-            if (round == 1) label1.Content = "Downloading update: " + convertedrev + " / " + convertedtotal;
-            else label1.Content = "Downloading Language Pack: " + convertedrev + " / " + convertedtotal;
+            if (round == 1) label1.Text = "Downloading update: " + convertedrev + " / " + convertedtotal;
+            else label1.Text = "Downloading Language Pack: " + convertedrev + " / " + convertedtotal;
         }
 
         //private void wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -549,14 +589,14 @@ namespace DS4Updater
             if (new FileInfo(outputUpdatePath).Length > 0)
             {
                 Process[] processes = Process.GetProcessesByName("DS4Windows");
-                label1.Content = "Download Complete";
+                label1.Text = "Download Complete";
                 Logger.Log($"Download completed; found DS4Windows processes count={processes.Length}");
                 if (processes.Length > 0)
                 {
                     if (MessageBox.Show("It will be closed to continue this update.", "DS4Windows is still running", MessageBoxButton.OKCancel, MessageBoxImage.Exclamation) == MessageBoxResult.OK)
                     {
                         Logger.Log("User agreed to terminate DS4Windows");
-                        label1.Content = "Terminating DS4Windows";
+                        label1.Text = "Terminating DS4Windows";
                         foreach (Process p in processes)
                         {
                             if (!p.HasExited)
@@ -588,7 +628,7 @@ namespace DS4Updater
 
                 while (processes.Length > 0)
                 {
-                    label1.Content = "Waiting for DS4Windows to close";
+                    label1.Text = "Waiting for DS4Windows to close";
                     processes = Process.GetProcessesByName("DS4Windows");
                     System.Threading.Thread.Sleep(200);
                 }
@@ -598,7 +638,7 @@ namespace DS4Updater
                 if (processes.Length > 0)
                 {
                     Logger.Log("HidGuardHelper found; waiting for it to close");
-                    label1.Content = "Waiting for HidGuardHelper to close";
+                    label1.Text = "Waiting for HidGuardHelper to close";
                     System.Threading.Thread.Sleep(5000);
 
                     processes = Process.GetProcessesByName("HidGuardHelper");
@@ -612,7 +652,7 @@ namespace DS4Updater
                 }
 
                 label2.Opacity = 0;
-                label1.Content = "Deleting old files";
+                label1.Text = "Deleting old files";
                 Logger.Log("Deleting old files and preparing for install");
                 UpdaterBar.Value = 102;
                 TaskbarItemInfo.ProgressValue = UpdaterBar.Value / 106d;
@@ -677,7 +717,7 @@ namespace DS4Updater
                 }
                 catch (Exception ex) { Logger.LogException(ex, "DeleteOldFiles"); }
 
-                label1.Content = "Installing new files";
+                label1.Text = "Installing new files";
                 Logger.Log($"Extracting archive {outputUpdatePath}");
                 UpdaterBar.Value = 104;
                 TaskbarItemInfo.ProgressValue = UpdaterBar.Value / 106d;
@@ -757,21 +797,21 @@ namespace DS4Updater
                 {
                     //File.Delete(exepath + $"\\DS4Windows_{newversion}_{arch}.zip");
                     //File.Delete(exepath + "\\" + lang + ".zip");
-                    label1.Content = $"DS4Windows has been updated to v{newversion}";
+                    label1.Text = $"DS4Windows has been updated to v{newversion}";
                     UpdaterResult.ExitCode = 0;
                     UpdaterResult.Message = $"updated:{newversion}";
                     Logger.Log($"Update success: newversion={newversion}");
                 }
                 else if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")) || File.Exists(Path.Combine(ds4WindowsDir, "DS4Tool.exe")))
                 {
-                    label1.Content = "Could not replace DS4Windows, please manually unzip";
+                    label1.Text = "Could not replace DS4Windows, please manually unzip";
                     UpdaterResult.ExitCode = 5;
                     UpdaterResult.Message = "replace_failed";
                     Logger.Log("Replace failed: DS4Windows present but version mismatch after install");
                 }
                 else
                 {
-                    label1.Content = "Could not unpack zip, please manually unzip";
+                    label1.Text = "Could not unpack zip, please manually unzip";
                     UpdaterResult.ExitCode = 6;
                     UpdaterResult.Message = "unpack_failed";
                     Logger.Log("Unpack failed: DS4Windows executable not found after extraction");
@@ -809,7 +849,7 @@ namespace DS4Updater
 
                 if (autoLaunchDS4W)
                 {
-                    label1.Content = "Launching DS4Windows soon";
+                    label1.Text = "Launching DS4Windows soon";
                     btnOpenDS4.IsEnabled = false;
                     Task.Delay(5000).ContinueWith((t) =>
                     {
@@ -842,12 +882,12 @@ namespace DS4Updater
                     }
                     //wc.DownloadFileAsync(url, outputUpdatePath);
                 }
-                catch (Exception ex) { Logger.LogException(ex, "BackupDownload"); Application.Current.Dispatcher.Invoke(() => { label1.Content = ex.Message; }); }
+                catch (Exception ex) { Logger.LogException(ex, "BackupDownload"); Application.Current.Dispatcher.Invoke(() => { label1.Text = ex.Message; }); }
                 backup = true;
             }
             else
             {
-                label1.Content = "Could not download update";
+                label1.Text = "Could not download update";
                 Logger.Log("Could not download update (final backup step)");
                 try { btnRetry.Visibility = Visibility.Visible; } catch { }
                 try
@@ -904,7 +944,7 @@ namespace DS4Updater
             {
                 Logger.Log("User initiated retry of download");
                 btnRetry.Visibility = Visibility.Collapsed;
-                label1.Content = "Retrying download...";
+                label1.Text = "Retrying download...";
                 if (string.IsNullOrEmpty(newversion))
                 {
                     Logger.Log("Retry requested but newversion is empty; starting version file download");

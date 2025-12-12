@@ -141,6 +141,16 @@ namespace DS4Updater
 
         public App()
         {
+            // Ensure process is per-monitor DPI aware (v2) so WPF handles scaling across monitors correctly
+            try
+            {
+                DpiHelper.EnablePerMonitorDpiAwareness();
+                Logger.Log("Set process DPI awareness to Per-Monitor v2");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogException(ex, "EnablePerMonitorDpiAwareness");
+            }
             //Debug.WriteLine(CultureInfo.CurrentCulture);
             this.Exit += (s, e) =>
             {
