@@ -582,7 +582,9 @@ namespace DS4Updater
                 Logger.Log($"Download completed; found DS4Windows processes count={processes.Length}");
                 if (processes.Length > 0)
                 {
-                    if (MessageBox.Show("It will be closed to continue this update.", "DS4Windows is still running", MessageBoxButton.OKCancel, MessageBoxImage.Exclamation) == MessageBoxResult.OK)
+                    string msgTitle = "DS4Windows is still running";
+                    string msgBody = msgTitle + Environment.NewLine + Environment.NewLine + "It will be closed to continue this update.";
+                    if (MessageBox.Show(msgBody, msgTitle, MessageBoxButton.OKCancel, MessageBoxImage.Exclamation) == MessageBoxResult.OK)
                     {
                         Logger.Log("User agreed to terminate DS4Windows");
                         label1.Text = "Terminating DS4Windows";
@@ -894,20 +896,11 @@ namespace DS4Updater
                     dir = dir.Parent;
                 }
 
-                ProcessStartInfo startInfo;
-                if (!string.IsNullOrEmpty(changelog))
-                {
-                    startInfo = new ProcessStartInfo(changelog) { UseShellExecute = true };
-                    Logger.Log($"Opening local changelog: {changelog}");
-                }
-                else
-                {
-                    // Fallback: open repository CHANGELOG on GitHub if repo config available
-                    string fallback = repoConfig?.DS4WindowsRepoUrl ?? "https://github.com/";
-                    string url = fallback.EndsWith("/") ? fallback + "blob/main/CHANGELOG.md" : fallback + "/blob/main/CHANGELOG.md";
-                    startInfo = new ProcessStartInfo(url) { UseShellExecute = true };
-                    Logger.Log($"Opening remote changelog: {url}");
-                }
+                // Always open the repository's latest release page when the user requests changelog
+                string fallback = repoConfig?.DS4WindowsRepoUrl ?? "https://github.com/";
+                string url = fallback.TrimEnd('/') + "/releases/latest";
+                ProcessStartInfo startInfo = new ProcessStartInfo(url) { UseShellExecute = true };
+                Logger.Log($"Opening repository latest release page: {url}");
 
                 using (Process tempProc = Process.Start(startInfo)) { }
             }
