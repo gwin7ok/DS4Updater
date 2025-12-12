@@ -1,0 +1,56 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Publish Updater2 x64",
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "publish",
+                "./Updater2/DS4Updater.csproj",
+                "-c", "Release",
+                "-o", "./Updater2/bin/x64/Release/net8.0-windows"
+            ],
+            "group": "build"
+        },
+        {
+            "label": "post-build-updater2",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "./scripts/post-build.ps1",
+                "${workspaceFolder}/Updater2/bin/x64/Release/net8.0-windows",
+                "${workspaceFolder}",
+                "${input:version}",
+                "x64"
+            ],
+            "group": "build",
+            "dependsOn": "Publish Updater2 x64"
+        },
+        {
+            "label": "release: publish-and-create-release",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "./scripts/release-and-publish.ps1",
+                "-WithV"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "version",
+            "type": "promptString",
+            "description": "Release version (e.g. 3.0.0)",
+            "default": "3.0.0"
+        }
+    ]
+}
