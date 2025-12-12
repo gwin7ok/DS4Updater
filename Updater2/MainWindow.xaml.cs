@@ -59,6 +59,8 @@ namespace DS4Updater
         private string updatesFolder = "";
         public bool autoLaunchDS4W = false;
         public bool forceLaunchDS4WUser = false;
+        // PreferredLaunchMode can be "admin" or "user" when passed from DS4Windows.
+        public string PreferredLaunchMode = null;
         internal string arch = Environment.Is64BitProcess ? "x64" : "x86";
         // Repo configuration (base URL and derived API URL)
         private RepoConfig repoConfig;
@@ -923,13 +925,32 @@ namespace DS4Updater
 
         private void BtnOpenDS4_Click(object sender, RoutedEventArgs e)
         {
-            if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")))
-                Process.Start(Path.Combine(ds4WindowsDir, "DS4Windows.exe"));
-            else
-                Process.Start(ds4WindowsDir);
+            try
+            {
+                string exe = Path.Combine(ds4WindowsDir, "DS4Windows.exe");
+                bool runAsAdmin = false;
+                if (!string.IsNullOrEmpty(PreferredLaunchMode)) runAsAdmin = string.Equals(PreferredLaunchMode, "admin", StringComparison.OrdinalIgnoreCase);
 
-            App.openingDS4W = true;
-            this.Close();
+                if (File.Exists(exe))
+                {
+                    Util.StartProcessDetached(exe, runAsAdmin, ds4WindowsDir);
+                }
+                else
+                {
+                    // Open folder via shell (non-exe)
+                    Util.StartProcessDetached(ds4WindowsDir, false, ds4WindowsDir);
+                }
+
+                App.openingDS4W = true;
+                this.Close();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogException(ex, "BtnOpenDS4_Click");
+                try { Process.Start(Path.Combine(ds4WindowsDir, "DS4Windows.exe")); } catch { }
+                App.openingDS4W = true;
+                this.Close();
+            }
         }
 
         private void PrepareAutoOpenDS4()

@@ -98,6 +98,19 @@ namespace DS4Updater
                 {
                     UpdaterResult.IsCiMode = true;
                 }
+                else if (temp.StartsWith("--launch-mode=", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var mode = temp.Substring("--launch-mode=".Length).Trim();
+                        if (!string.IsNullOrEmpty(mode))
+                        {
+                            // Pass through to MainWindow for behavior when auto-launching DS4Windows
+                            mwd.PreferredLaunchMode = mode;
+                        }
+                    }
+                    catch { }
+                }
             }
 
             // Inject parsed repo configuration (ds4updater and ds4windows repos)
@@ -187,21 +200,35 @@ namespace DS4Updater
             string finalLaunchExePath = Path.Combine(exedirpath, "DS4Windows.exe");
             if (File.Exists(launchExePath))
                 finalLaunchExePath = launchExePath;
-
-            if (mwd.forceLaunchDS4WUser)
+            try
             {
-                // Attempt to launch program as a normal user
-                Util.StartProcessInExplorer(finalLaunchExePath);
-            }
-            else
-            {
-                // Attempt to launch Explorer with folder open
-                ProcessStartInfo startInfo = new ProcessStartInfo(finalLaunchExePath);
-                startInfo.WorkingDirectory = exedirpath;
-                using (Process tempProc = Process.Start(startInfo))
+                // If a preferred launch mode was provided by the launching DS4Windows, respect it
+                if (!string.IsNullOrEmpty(mwd.PreferredLaunchMode))
                 {
-                    Logger.Log($"Auto-launch DS4Windows: {finalLaunchExePath}");
+                    bool runAsAdmin = string.Equals(mwd.PreferredLaunchMode, "admin", StringComparison.OrdinalIgnoreCase);
+                    Util.StartProcessDetached(finalLaunchExePath, runAsAdmin, exedirpath);
+                    Logger.Log($"Auto-launch DS4Windows (preferred mode): {finalLaunchExePath} mode={mwd.PreferredLaunchMode}");
                 }
+                else if (mwd.forceLaunchDS4WUser)
+                {
+                    // Attempt to launch program as a normal user via shell token
+                    Util.StartProcessInExplorer(finalLaunchExePath);
+                    Logger.Log($"Auto-launch DS4Windows via explorer: {finalLaunchExePath}");
+                }
+                else
+                {
+                    ProcessStartInfo startInfo = new ProcessStartInfo(finalLaunchExePath);
+                    startInfo.WorkingDirectory = exedirpath;
+                    using (Process tempProc = Process.Start(startInfo))
+                    {
+                        Logger.Log($"Auto-launch DS4Windows: {finalLaunchExePath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogException(ex, "AutoOpenDS4");
+                try { Process.Start(finalLaunchExePath); } catch { }
             }
         }
     }
