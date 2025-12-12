@@ -72,12 +72,26 @@ namespace DS4Updater
 
         public bool AdminNeeded()
         {
+            string tmpName = $"ds4up_test_{Guid.NewGuid()}.tmp";
             try
             {
-                File.WriteAllText(Path.Combine(ds4UpdaterDir, "test.txt"), "test");
-                // Add a small sleep period as a pre-caution
+                // Test write to ds4UpdaterDir
+                string upPath = Path.Combine(ds4UpdaterDir, tmpName);
+                File.WriteAllText(upPath, "test");
                 Thread.Sleep(20);
-                File.Delete(Path.Combine(ds4UpdaterDir, "test.txt"));
+                File.Delete(upPath);
+
+                // If ds4WindowsDir differs, also test write there
+                if (!string.Equals(Path.GetFullPath(ds4UpdaterDir).TrimEnd(Path.DirectorySeparatorChar),
+                                   Path.GetFullPath(ds4WindowsDir).TrimEnd(Path.DirectorySeparatorChar),
+                                   StringComparison.OrdinalIgnoreCase))
+                {
+                    string winPath = Path.Combine(ds4WindowsDir, tmpName);
+                    File.WriteAllText(winPath, "test");
+                    Thread.Sleep(20);
+                    File.Delete(winPath);
+                }
+
                 return false;
             }
             catch (UnauthorizedAccessException)
