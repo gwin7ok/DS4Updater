@@ -23,7 +23,7 @@ jobs:
         id: get_version
         shell: pwsh
         run: |
-          $refName = '${{ github.ref_name }}'
+          $refName = "${{ github.ref_name }}"
           if ($refName -match '^v(.+)$') {
             $v = $Matches[1]
             echo "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding ascii -Append
@@ -36,7 +36,7 @@ jobs:
         id: extract_changelog
         shell: pwsh
         run: |
-          $v = '${{ steps.get_version.outputs.version }}'
+          $v = "${{ steps.get_version.outputs.version }}"
           $out = 'changes.txt'
           if (Test-Path $out) { Remove-Item $out }
           $inSection = $false
@@ -55,7 +55,7 @@ jobs:
       - name: Package artifacts (post-build)
         shell: pwsh
         run: |
-          $v = '${{ steps.get_version.outputs.version }}'
+          $v = "${{ steps.get_version.outputs.version }}"
           if (Test-Path './artifacts/win-x64') {
             Write-Host "Running utils/post-build.ps1 for artifacts/win-x64 ..."
             pwsh -NoProfile -NonInteractive -File ./utils/post-build.ps1 ./artifacts/win-x64 ./artifacts $v x64
@@ -68,7 +68,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          $v = '${{ steps.get_version.outputs.version }}'
+          $v = "${{ steps.get_version.outputs.version }}"
           $tag = "v$v"
           $repo = $env:REPO
           $uri = "https://api.github.com/repos/$repo/releases/tags/$tag"
