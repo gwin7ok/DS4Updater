@@ -21,9 +21,7 @@
                 "-NoProfile",
                 "-File",
                 "./scripts/post-build.ps1",
-                "${workspaceFolder}/Updater2/bin/x64/Release",
-                "${workspaceFolder}",
-                "x64"
+                "${workspaceFolder}/Updater2/bin/x64/Release"
             ],
             "group": "build",
             "dependsOn": "Publish Updater2 x64"
