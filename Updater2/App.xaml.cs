@@ -42,6 +42,7 @@ namespace DS4Updater
         private void Application_Startup(object sender, StartupEventArgs e)
         {
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+            Logger.Log($"Application_Startup: args={string.Join(' ', e.Args)}");
 
             mwd = new MainWindow();
             // allow overriding paths via args
@@ -168,6 +169,7 @@ namespace DS4Updater
                     Directory.Delete(exedirpath + "\\Update Files", true);
                 }
                 // Write CI result and set process exit code if requested
+                Logger.Log("Application exiting: cleaning up and writing result");
                 UpdaterResult.WriteAndApply();
             };
 
@@ -198,6 +200,7 @@ namespace DS4Updater
                 startInfo.WorkingDirectory = exedirpath;
                 using (Process tempProc = Process.Start(startInfo))
                 {
+                    Logger.Log($"Auto-launch DS4Windows: {finalLaunchExePath}");
                 }
             }
         }

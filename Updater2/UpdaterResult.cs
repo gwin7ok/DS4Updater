@@ -22,6 +22,11 @@ namespace DS4Updater
                 }
             }
             catch { }
+            try
+            {
+                Logger.Log($"Exiting with code={ExitCode} message={Message}");
+            }
+            catch { }
             Environment.ExitCode = ExitCode;
         }
     }
