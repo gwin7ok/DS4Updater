@@ -23,7 +23,6 @@
                 "./scripts/post-build.ps1",
                 "${workspaceFolder}/Updater2/bin/x64/Release/net8.0-windows",
                 "${workspaceFolder}",
-                "${input:version}",
                 "x64"
             ],
             "group": "build",
@@ -45,12 +44,5 @@
             }
         }
     ],
-    "inputs": [
-        {
-            "id": "version",
-            "type": "promptString",
-            "description": "Release version (e.g. 3.0.0)",
-            "default": "3.0.0"
-        }
-    ]
+    
 }
