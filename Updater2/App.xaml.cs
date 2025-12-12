@@ -93,6 +93,10 @@ namespace DS4Updater
                 {
                     ds4updaterPath = e.Args[++i];
                 }
+                else if (temp.Equals("--ci", StringComparison.OrdinalIgnoreCase))
+                {
+                    UpdaterResult.IsCiMode = true;
+                }
             }
 
             // Inject parsed repo configuration (ds4updater and ds4windows repos)
@@ -112,6 +116,13 @@ namespace DS4Updater
             try { mwd.SetPaths(ds4windowsPath, ds4updaterPath); } catch { }
 
             mwd.Show();
+            // If CI mode requested, don't show UI (but we still used MainWindow for logic)
+            if (UpdaterResult.IsCiMode)
+            {
+                // In CI mode we will run headless and close the app when finished.
+                // MainWindow will set UpdaterResult.ExitCode/Message during processing.
+                // Ensure result is written on exit (handled in App.Exit event below).
+            }
         }
 
         public App()
@@ -156,6 +167,8 @@ namespace DS4Updater
                 {
                     Directory.Delete(exedirpath + "\\Update Files", true);
                 }
+                // Write CI result and set process exit code if requested
+                UpdaterResult.WriteAndApply();
             };
 
             this.Exit += (s, e) =>

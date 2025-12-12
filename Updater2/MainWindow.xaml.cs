@@ -114,7 +114,11 @@ namespace DS4Updater
                 version = FileVersionInfo.GetVersionInfo(Path.Combine(ds4WindowsDir, "DS4Windows.exe")).FileVersion;
 
             if (AdminNeeded())
+            {
                 label1.Content = "Please re-run with admin rights";
+                UpdaterResult.ExitCode = 3;
+                UpdaterResult.Message = "admin_required";
+            }
             else
             {
                 custom_exe_name_path = Path.Combine(ds4UpdaterDir, CUSTOM_EXE_CONFIG_FILENAME);
@@ -140,7 +144,7 @@ namespace DS4Updater
 
                     updatesFolder = Path.Combine(ds4WindowsDir, "Updates");
                 }
-                catch (IOException) { label1.Content = "Cannot save download at this time"; return; }
+                catch (IOException) { label1.Content = "Cannot save download at this time"; UpdaterResult.ExitCode = 4; UpdaterResult.Message = "cannot_save_download"; return; }
 
                 if (File.Exists(Path.Combine(ds4WindowsDir, "Profiles.xml")))
                     path = ds4WindowsDir;
@@ -170,6 +174,8 @@ namespace DS4Updater
                 else if (!downloading)
                 {
                     label1.Content = "DS4Windows is up to date";
+                    UpdaterResult.ExitCode = 0;
+                    UpdaterResult.Message = "up_to_date";
                     try
                     {
                         File.Delete(path + "\\version.txt");
@@ -251,6 +257,8 @@ namespace DS4Updater
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             label1.Content = "Could not download update";
+                            UpdaterResult.ExitCode = 2;
+                            UpdaterResult.Message = "download_failed";
                         });
                     }
 
@@ -261,6 +269,8 @@ namespace DS4Updater
                     Application.Current.Dispatcher.Invoke(() =>
                     {
                         label1.Content = "Could not download update";
+                        UpdaterResult.ExitCode = 2;
+                        UpdaterResult.Message = "download_failed";
                     });
                 }
                 catch (Exception e) { label1.Content = e.Message; }
@@ -646,13 +656,21 @@ namespace DS4Updater
                     //File.Delete(exepath + $"\\DS4Windows_{newversion}_{arch}.zip");
                     //File.Delete(exepath + "\\" + lang + ".zip");
                     label1.Content = $"DS4Windows has been updated to v{newversion}";
+                    UpdaterResult.ExitCode = 0;
+                    UpdaterResult.Message = $"updated:{newversion}";
                 }
                 else if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")) || File.Exists(Path.Combine(ds4WindowsDir, "DS4Tool.exe")))
                 {
                     label1.Content = "Could not replace DS4Windows, please manually unzip";
+                    UpdaterResult.ExitCode = 5;
+                    UpdaterResult.Message = "replace_failed";
                 }
                 else
+                {
                     label1.Content = "Could not unpack zip, please manually unzip";
+                    UpdaterResult.ExitCode = 6;
+                    UpdaterResult.Message = "unpack_failed";
+                }
 
                 // Check for custom exe name setting
                 string custom_exe_name_path = Path.Combine(ds4UpdaterDir, CUSTOM_EXE_CONFIG_FILENAME);

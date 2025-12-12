@@ -91,6 +91,32 @@ DS4Updater.exe --ds4windows-path "C:\Program Files\DS4Windows" --ds4updater-path
 - 引数の互換性
   - 既存の `--base-url` を渡す古い呼び出しもサポートされ、`--base-url` は `--ds4windows-repo` として扱われます。
 
+CI モード（終了コード / 機械判定）
+----------------------------
+- 目的: 自動化スクリプトや `DS4Windows` 側で Updater の結果を判定できるように、終了コードと標準出力による機械判定を追加しました。
+- 有効化: `--ci` を起動引数に渡すと CI/非対話モードの出力を行います（UI 表示はそのままですが、標準出力へ結果 JSON を書き出し、終了コードを設定します）。
+- 出力フォーマット（JSON）: 標準出力へ単一行 JSON を出力します。例:
+
+```json
+{"exit": 0, "message": "updated:1.2.3"}
+```
+
+- 既定の終了コード（実装済み）:
+  - `0` : 成功（`up_to_date` または `updated:<version>`）
+  - `2` : ダウンロード失敗（`download_failed`）
+  - `3` : 管理者権限が必要（`admin_required`）
+  - `4` : ダウンロード保存不可（`cannot_save_download`）
+  - `5` : 置換失敗（`replace_failed`）
+  - `6` : 展開失敗（`unpack_failed`）
+
+- 実装の参照: `Updater2/UpdaterResult.cs`（`UpdaterResult` が `ExitCode`/`Message` を管理し、`--ci` 時に JSON を出力します）。アプリ終了時に `UpdaterResult.WriteAndApply()` が呼ばれて結果が出力され、`Environment.ExitCode` が設定されます。
+
+- 呼び出し例（CI 連携）:
+
+```powershell
+& 'path\to\DS4Updater.exe' --ds4windows-path 'C:\Program Files\DS4Windows' --ci
+```
+
 実装での参照先（開発者向け）
 ---------------------------
 - 起動引数の解析: `App.xaml.cs`（`Application_Startup`）
