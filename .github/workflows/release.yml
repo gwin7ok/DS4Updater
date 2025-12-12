@@ -32,10 +32,20 @@ jobs:
             exit 1
           }
 
-      - name: Create changelog (from commit message)
+      - name: Extract changelog section
+        id: extract_changelog
         shell: pwsh
         run: |
-          git log -1 --pretty=%B > changes.txt
+          $v = '${{ steps.get_version.outputs.version }}'
+          $out = 'changes.txt'
+          if (Test-Path $out) { Remove-Item $out }
+          $inSection = $false
+          Get-Content CHANGELOG.md | ForEach-Object {
+            if ($_ -match "^## \[$v\]") { $inSection = $true; return }
+            if ($inSection -and ($_ -match '^## \[')) { $inSection = $false }
+            if ($inSection) { Add-Content -Path $out -Value $_ }
+          }
+          if (-not (Test-Path $out) -or (Get-Content $out).Count -eq 0) { Write-Error "No changelog section found for version $v"; exit 1 }
 
       - name: Publish Updater2
         shell: pwsh
