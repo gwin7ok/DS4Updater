@@ -1,6 +1,6 @@
 Param(
     [Parameter(Mandatory=$true)][string]$InputDir,
-    [Parameter(Mandatory=$true)][string]$OutDir,
+    [Parameter(Mandatory=$false)][string]$OutDir,
     [string]$Version,
     [string]$Arch = 'x64'
 )
@@ -25,6 +25,8 @@ if (-not $Version -or $Version.Trim() -eq '') {
 }
 
 if (-not (Test-Path $InputDir)) { Write-Error "InputDir not found: $InputDir"; exit 1 }
+# Default OutDir to InputDir (publish folder) when not provided
+if (-not $OutDir -or $OutDir.Trim() -eq '') { $OutDir = $InputDir }
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Null }
 
 $zipName = "DS4Updater_${Version}_${Arch}.zip"
