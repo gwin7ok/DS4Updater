@@ -914,19 +914,13 @@ namespace DS4Updater
         {
             try
             {
-                Logger.Log("User initiated retry of download");
+                Logger.Log("User initiated retry of download (will refresh latest version first)");
                 btnRetry.Visibility = Visibility.Collapsed;
                 label1.Text = "Retrying download...";
-                if (string.IsNullOrEmpty(newversion))
-                {
-                    Logger.Log("Retry requested but newversion is empty; starting version file download");
-                    StartVersionFileDownload();
-                    return;
-                }
 
-                Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
-                outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
-                StartAppArchiveDownload(url, outputUpdatePath);
+                // Always fetch the latest release info first, then subwc_DownloadFileCompleted will trigger the archive download
+                StartVersionFileDownload();
+                return;
             }
             catch (Exception ex)
             {
