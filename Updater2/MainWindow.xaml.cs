@@ -115,9 +115,57 @@ namespace DS4Updater
 
             if (AdminNeeded())
             {
-                label1.Content = "Please re-run with admin rights";
-                UpdaterResult.ExitCode = 3;
-                UpdaterResult.Message = "admin_required";
+                // If running in CI/headless mode, do not prompt for elevation
+                string[] cmdArgs = Environment.GetCommandLineArgs();
+                bool isCi = cmdArgs.Any(a => string.Equals(a, "--ci", StringComparison.OrdinalIgnoreCase));
+
+                if (isCi)
+                {
+                    label1.Content = "Please re-run with admin rights";
+                    UpdaterResult.ExitCode = 3;
+                    UpdaterResult.Message = "admin_required";
+                }
+                else
+                {
+                    var result = MessageBox.Show("Administrator rights are required to update. Restart with elevated privileges?", "Elevation Required", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        try
+                        {
+                            // Re-launch self with same command-line args, requesting elevation
+                            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                            string arguments = string.Empty;
+                            if (cmdArgs.Length > 1)
+                            {
+                                arguments = string.Join(" ", cmdArgs.Skip(1).Select(a => a.Contains(' ') ? "\"" + a + "\"" : a));
+                            }
+
+                            var psi = new System.Diagnostics.ProcessStartInfo(exePath, arguments)
+                            {
+                                UseShellExecute = true,
+                                Verb = "runas",
+                                WorkingDirectory = AppContext.BaseDirectory
+                            };
+                            System.Diagnostics.Process.Start(psi);
+                            Application.Current.Shutdown();
+                            return;
+                        }
+                        catch (System.ComponentModel.Win32Exception)
+                        {
+                            // User refused elevation or an error occurred
+                            label1.Content = "Elevation was cancelled or failed";
+                            UpdaterResult.ExitCode = 3;
+                            UpdaterResult.Message = "admin_required";
+                            // fall through to allow user to close the UI
+                        }
+                    }
+                    else
+                    {
+                        label1.Content = "Please re-run with admin rights";
+                        UpdaterResult.ExitCode = 3;
+                        UpdaterResult.Message = "admin_required";
+                    }
+                }
             }
             else
             {
