@@ -107,6 +107,9 @@ namespace DS4Updater
 
             Logger.Log($"Startup: args={string.Join(' ', Environment.GetCommandLineArgs())}");
 
+            // Ensure retry button hidden at startup
+            try { btnRetry.Visibility = Visibility.Collapsed; } catch { }
+
             wc.DefaultRequestHeaders.Add("User-Agent", "DS4Windows Updater");
 
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
@@ -302,7 +305,9 @@ namespace DS4Updater
                                     wc_DownloadProgressChanged(new CopyProgress(totalBytesRead, contentLen));
                                 });
                             }
-
+                                Logger.Log($"StartAppArchiveDownload called. url={url} output={outputUpdatePath}");
+                                // hide retry button when (re)starting a download
+                                try { Application.Current.Dispatcher.Invoke(() => { btnRetry.Visibility = Visibility.Collapsed; }); } catch { }
                             if (downloadStream.CanSeek) downloadStream.Position = 0;
                         }
 
@@ -326,6 +331,7 @@ namespace DS4Updater
                             UpdaterResult.Message = "download_failed";
                             Logger.Log($"Download failed (StartAppArchiveDownload) for url={url}");
                             Logger.Log($"Download failed for url={url}");
+                            try { btnRetry.Visibility = Visibility.Visible; } catch { }
                         });
                     }
 
@@ -340,6 +346,7 @@ namespace DS4Updater
                         UpdaterResult.Message = "download_failed";
                         Logger.Log($"Download failed (StartAppArchiveDownload catch) for url={url}");
                         Logger.LogException(ex, "StartAppArchiveDownload_HttpRequestException");
+                        try { btnRetry.Visibility = Visibility.Visible; } catch { }
                     });
                 }
                 catch (Exception e) { Logger.LogException(e, "StartAppArchiveDownload_General"); Application.Current.Dispatcher.Invoke(() => { label1.Content = e.Message; }); }
@@ -382,6 +389,7 @@ namespace DS4Updater
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             label1.Content = "Could not download update";
+                            try { btnRetry.Visibility = Visibility.Visible; } catch { }
                         });
                     }
                     //subwc.DownloadFileAsync(urlv, Path.Combine(ds4WindowsDir, "version.txt"));
@@ -393,6 +401,7 @@ namespace DS4Updater
                     Application.Current.Dispatcher.Invoke(() =>
                     {
                         label1.Content = "Could not download update";
+                        try { btnRetry.Visibility = Visibility.Visible; } catch { }
                     });
                 }
             });
@@ -459,8 +468,6 @@ namespace DS4Updater
                     //});
                 };
                 _ = currentTask?.Invoke();
-                //wc.DownloadFileCompleted += wc_DownloadFileCompleted;
-                //wc.DownloadProgressChanged += wc_DownloadProgressChanged;
             }
             else
             {
@@ -640,8 +647,15 @@ namespace DS4Updater
                     {
                         if (File.Exists(checkFile))
                         {
-                            File.Delete(checkFile);
-                            Logger.Log($"Deleted file {checkFile}");
+                            try
+                            {
+                                File.Delete(checkFile);
+                                Logger.Log($"Deleted file {checkFile}");
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.LogException(ex, "DeleteCheckFile");
+                            }
                         }
                     }
 
@@ -833,6 +847,7 @@ namespace DS4Updater
             {
                 label1.Content = "Could not download update";
                 Logger.Log("Could not download update (final backup step)");
+                try { btnRetry.Visibility = Visibility.Visible; } catch { }
                 try
                 {
                     File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
@@ -845,16 +860,65 @@ namespace DS4Updater
 
         private void BtnChangelog_Click(object sender, RoutedEventArgs e)
         {
-            // TODO change
-            ProcessStartInfo startInfo = new ProcessStartInfo("https://docs.google.com/document/d/1CovpH08fbPSXrC6TmEprzgPwCe0tTjQ_HTFfDotpmxk/edit?usp=sharing");
-            startInfo.UseShellExecute = true;
+            // Open repository CHANGELOG.md if available; otherwise fallback to repo URL
             try
             {
-                using (Process tempProc = Process.Start(startInfo))
+                string baseDir = AppContext.BaseDirectory;
+                string changelog = null;
+                var dir = new DirectoryInfo(baseDir);
+                for (int i = 0; i < 8 && dir != null; i++)
                 {
+                    var candidate = Path.Combine(dir.FullName, "CHANGELOG.md");
+                    if (File.Exists(candidate)) { changelog = candidate; break; }
+                    dir = dir.Parent;
                 }
+
+                ProcessStartInfo startInfo;
+                if (!string.IsNullOrEmpty(changelog))
+                {
+                    startInfo = new ProcessStartInfo(changelog) { UseShellExecute = true };
+                    Logger.Log($"Opening local changelog: {changelog}");
+                }
+                else
+                {
+                    // Fallback: open repository CHANGELOG on GitHub if repo config available
+                    string fallback = repoConfig?.DS4WindowsRepoUrl ?? "https://github.com/";
+                    string url = fallback.EndsWith("/") ? fallback + "blob/main/CHANGELOG.md" : fallback + "/blob/main/CHANGELOG.md";
+                    startInfo = new ProcessStartInfo(url) { UseShellExecute = true };
+                    Logger.Log($"Opening remote changelog: {url}");
+                }
+
+                using (Process tempProc = Process.Start(startInfo)) { }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Logger.LogException(ex, "BtnChangelog_Click");
+            }
+        }
+
+        private void BtnRetry_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Logger.Log("User initiated retry of download");
+                btnRetry.Visibility = Visibility.Collapsed;
+                label1.Content = "Retrying download...";
+                if (string.IsNullOrEmpty(newversion))
+                {
+                    Logger.Log("Retry requested but newversion is empty; starting version file download");
+                    StartVersionFileDownload();
+                    return;
+                }
+
+                Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
+                StartAppArchiveDownload(url, outputUpdatePath);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogException(ex, "BtnRetry_Click");
+                try { btnRetry.Visibility = Visibility.Visible; } catch { }
+            }
         }
 
         private void BtnOpenDS4_Click(object sender, RoutedEventArgs e)
