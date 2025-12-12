@@ -3,14 +3,36 @@ Param(
     [string]$Remote = 'origin',
     [switch]$DryRun,
     [switch]$SkipBuild,
-    [string]$TokenEnvVar = 'GITHUB_TOKEN'
+    [string]$TokenEnvVar = 'GITHUB_TOKEN',
+    # Repo can be passed as 'owner/repo' or full URL. If not provided, environment variable REPO, REPO_OWNER/REPO_NAME,
+    # or the hardcoded defaults below will be used.
+    [string]$Repo = $env:REPO
 )
 
 Set-StrictMode -Version Latest
 
-# repo info
-$repoOwner = 'gwin7ok'
-$repoName = 'DS4Updater'
+# repo info (can be overridden via parameters or environment variables)
+$repoOwner = $env:REPO_OWNER
+$repoName = $env:REPO_NAME
+
+# If Repo parameter (owner/repo or URL) provided, parse it
+if ($Repo) {
+    if ($Repo -match '^https?://') {
+        # URL form: https://github.com/owner/repo
+        $m = [regex]::Match($Repo, 'github\.com/([^/]+)/([^/]+)')
+        if ($m.Success) { $repoOwner = $m.Groups[1].Value; $repoName = $m.Groups[2].Value }
+    }
+    elseif ($Repo -match '^[^/]+/[^/]+$') {
+        $parts = $Repo.Split('/')
+        $repoOwner = $parts[0]; $repoName = $parts[1]
+    }
+}
+
+# Fallback to existing hardcoded defaults if still empty
+if (-not $repoOwner -or -not $repoName) {
+    if (-not $repoOwner) { $repoOwner = 'gwin7ok' }
+    if (-not $repoName) { $repoName = 'DS4Updater' }
+}
 
 $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 $repoRoot = (Resolve-Path -Path (Join-Path $scriptDir "..")).ProviderPath

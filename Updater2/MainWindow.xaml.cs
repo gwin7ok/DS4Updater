@@ -146,7 +146,7 @@ namespace DS4Updater
 
                 if (!downloading && version.Replace(',', '.').CompareTo(newversion) != 0)
                 {
-                    Uri url = new Uri($"{repoConfig.BaseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                    Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
                     sw.Start();
                     outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
                     StartAppArchiveDownload(url, outputUpdatePath);
@@ -162,6 +162,15 @@ namespace DS4Updater
                     catch { }
                     btnOpenDS4.IsEnabled = true;
                 }
+            }
+        }
+
+        // Allow App to inject parsed repo configuration (DS4Updater / DS4Windows URLs)
+        public void SetRepoConfig(RepoConfig config)
+        {
+            if (config != null)
+            {
+                repoConfig = config;
             }
         }
 
@@ -230,8 +239,8 @@ namespace DS4Updater
 
         private void StartVersionFileDownload()
         {
-            if (string.IsNullOrEmpty(repoConfig?.ApiLatestUrl)) return;
-            Uri urlv = new Uri(repoConfig.ApiLatestUrl);
+            if (string.IsNullOrEmpty(repoConfig?.DS4WindowsApiLatestUrl)) return;
+            Uri urlv = new Uri(repoConfig.DS4WindowsApiLatestUrl);
             //Sorry other devs, gonna have to find your own server
             downloading = true;
 
@@ -284,7 +293,7 @@ namespace DS4Updater
             File.Delete(Path.Combine(exepath, "version.txt"));
             if (version.Replace(',', '.').CompareTo(newversion) != 0)
             {
-                Uri url = new Uri($"{repoConfig.BaseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
                 sw.Start();
                 outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
 
@@ -658,7 +667,7 @@ namespace DS4Updater
             }
             else if (!backup)
             {
-                Uri url = new Uri($"{repoConfig.BaseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
 
                 sw.Start();
                 outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");

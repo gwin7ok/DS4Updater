@@ -76,6 +76,14 @@ namespace DS4Updater
                 }
             }
 
+            // Inject parsed repo configuration (ds4updater and ds4windows repos)
+            try
+            {
+                var cfg = RepoConfig.FromArgs(e.Args);
+                mwd.SetRepoConfig(cfg);
+            }
+            catch { }
+
             mwd.Show();
         }
 
