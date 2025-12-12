@@ -1,0 +1,88 @@
+name: Release (tag-triggered) - Updater2
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Get version from tag
+        id: get_version
+        shell: pwsh
+        run: |
+          $refName = '${{ github.ref_name }}'
+          if ($refName -match '^v(.+)$') {
+            $v = $Matches[1]
+            echo "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding ascii -Append
+          } else {
+            Write-Error "Ref name is not a v* tag: $refName"
+            exit 1
+          }
+
+      - name: Create changelog (from commit message)
+        shell: pwsh
+        run: |
+          git log -1 --pretty=%B > changes.txt
+
+      - name: Publish Updater2
+        shell: pwsh
+        run: |
+          dotnet publish ./Updater2/DS4Updater.csproj -c Release -o ./artifacts/win-x64
+
+      - name: Package artifacts (post-build)
+        shell: pwsh
+        run: |
+          $v = '${{ steps.get_version.outputs.version }}'
+          if (Test-Path './artifacts/win-x64') {
+            Write-Host "Running utils/post-build.ps1 for artifacts/win-x64 ..."
+            pwsh -NoProfile -NonInteractive -File ./utils/post-build.ps1 ./artifacts/win-x64 ./artifacts $v x64
+          } else { Write-Error './artifacts/win-x64 not found; aborting' ; exit 1 }
+
+      - name: Delete existing GitHub Release if present
+        id: delete_old_release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          $v = '${{ steps.get_version.outputs.version }}'
+          $tag = "v$v"
+          $repo = $env:REPO
+          $uri = "https://api.github.com/repos/$repo/releases/tags/$tag"
+          $headers = @{ Authorization = "token $env:GITHUB_TOKEN"; "User-Agent" = "actions" }
+          try {
+            $resp = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -ErrorAction Stop
+            if ($null -ne $resp -and $resp.id) {
+              Write-Output "Found existing release id $($resp.id) for $tag. Deleting..."
+              $delUri = "https://api.github.com/repos/$repo/releases/$($resp.id)"
+              Invoke-RestMethod -Uri $delUri -Headers $headers -Method Delete -ErrorAction Stop
+              Write-Output "Deleted release $tag (id $($resp.id))."
+            }
+          } catch {
+            Write-Output "No existing release for $tag or could not query releases: $($_.Exception.Message)"
+          }
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          body_path: changes.txt
+          files: |
+            artifacts/DS4Updater_${{ steps.get_version.outputs.version }}_x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
