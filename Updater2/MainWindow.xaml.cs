@@ -329,7 +329,7 @@ namespace DS4Updater
                 try
                 {
                     bool success = false;
-                    using (var downloadStream = new FileStream(outputUpdatePath, FileMode.CreateNew))
+                    using (var downloadStream = new FileStream(outputUpdatePath, FileMode.Create))
                     {
                         using HttpResponseMessage response = await wc.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
                         long contentLen = response.Content.Headers.ContentLength ?? 0;
@@ -469,7 +469,7 @@ namespace DS4Updater
                     try
                     {
                         bool success = false;
-                        using (var downloadStream = new FileStream(outputUpdatePath, FileMode.CreateNew))
+                        using (var downloadStream = new FileStream(outputUpdatePath, FileMode.Create))
                         {
                             using HttpResponseMessage response =
                                 await wc.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
@@ -849,7 +849,7 @@ namespace DS4Updater
                 try
                 {
                     bool success = false;
-                    using (var downloadStream = new FileStream(outputUpdatePath, FileMode.CreateNew))
+                    using (var downloadStream = new FileStream(outputUpdatePath, FileMode.Create))
                     {
                         using HttpResponseMessage response = await wc.GetAsync(url);
                         response.EnsureSuccessStatusCode();

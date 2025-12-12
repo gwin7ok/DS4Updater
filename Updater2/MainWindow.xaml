@@ -30,7 +30,7 @@
                     <TextBlock Text="View Changelog" TextWrapping="NoWrap" TextAlignment="Center" />
                 </Button>
                 <Button x:Name="btnOpenDS4" Margin="0,0,0,0" IsEnabled="False" Click="BtnOpenDS4_Click" Background="#FFF0F0F0">
-                    <TextBlock Text="Open DS4W" TextWrapping="NoWrap" TextAlignment="Center" />
+                    <TextBlock Text="Run DS4Windows" TextWrapping="NoWrap" TextAlignment="Center" />
                 </Button>
             </StackPanel>
         </Grid>

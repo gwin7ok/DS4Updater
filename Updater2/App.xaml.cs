@@ -43,6 +43,7 @@ namespace DS4Updater
         {
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
             Logger.Log($"Application_Startup: args={string.Join(' ', e.Args)}");
+            try { Logger.Log($"Application_Startup: CurrentDirectory={Environment.CurrentDirectory}"); } catch { }
 
             mwd = new MainWindow();
             // allow overriding paths via args
@@ -212,25 +213,28 @@ namespace DS4Updater
                 finalLaunchExePath = launchExePath;
             try
             {
+                // Determine the intended working directory for the launched DS4Windows process
+                string launchWorkingDir = Path.GetDirectoryName(finalLaunchExePath) ?? exedirpath;
+
                 // If a preferred launch mode was provided by the launching DS4Windows, respect it
                 if (!string.IsNullOrEmpty(mwd.PreferredLaunchMode))
                 {
                     bool runAsAdmin = string.Equals(mwd.PreferredLaunchMode, "admin", StringComparison.OrdinalIgnoreCase);
-                    Logger.Log($"AutoOpenDS4: launching with PreferredLaunchMode mode={mwd.PreferredLaunchMode}, path={finalLaunchExePath}, workingDir={exedirpath}, runAsAdmin={runAsAdmin}");
-                    Util.StartProcessDetached(finalLaunchExePath, runAsAdmin, exedirpath);
+                    Logger.Log($"AutoOpenDS4: launching with PreferredLaunchMode mode={mwd.PreferredLaunchMode}, path={finalLaunchExePath}, workingDir={launchWorkingDir}, runAsAdmin={runAsAdmin}");
+                    Util.StartProcessDetached(finalLaunchExePath, runAsAdmin, launchWorkingDir);
                     Logger.Log($"Auto-launch DS4Windows (preferred mode) initiated: {finalLaunchExePath} mode={mwd.PreferredLaunchMode}");
                 }
                 else if (mwd.forceLaunchDS4WUser)
                 {
                     // Attempt to launch program as a normal user via shell token
-                    Logger.Log($"AutoOpenDS4: launching via Explorer token: path={finalLaunchExePath}");
-                    Util.StartProcessInExplorer(finalLaunchExePath, exedirpath);
+                    Logger.Log($"AutoOpenDS4: launching via Explorer token: path={finalLaunchExePath}, workingDir={launchWorkingDir}");
+                    Util.StartProcessInExplorer(finalLaunchExePath, launchWorkingDir);
                     Logger.Log($"Auto-launch DS4Windows via explorer initiated: {finalLaunchExePath}");
                 }
                 else
                 {
                     ProcessStartInfo startInfo = new ProcessStartInfo(finalLaunchExePath);
-                    startInfo.WorkingDirectory = exedirpath;
+                    startInfo.WorkingDirectory = launchWorkingDir;
                     using (Process tempProc = Process.Start(startInfo))
                     {
                         Logger.Log($"Auto-launch DS4Windows via Process.Start: FileName={startInfo.FileName}, WorkingDirectory={startInfo.WorkingDirectory}, UseShellExecute={startInfo.UseShellExecute}, Arguments={startInfo.Arguments}");
