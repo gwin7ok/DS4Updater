@@ -25,8 +25,18 @@ if (-not $Version -or $Version.Trim() -eq '') {
 }
 
 if (-not (Test-Path $InputDir)) { Write-Error "InputDir not found: $InputDir"; exit 1 }
-# Default OutDir to InputDir (publish folder) when not provided
-if (-not $OutDir -or $OutDir.Trim() -eq '') { $OutDir = $InputDir }
+# Default OutDir to InputDir (publish folder) when not provided.
+# If InputDir is a framework-specific folder (e.g. net8.0-windows),
+# place the archive into its parent Release folder instead.
+if (-not $OutDir -or $OutDir.Trim() -eq '') {
+    $leaf = Split-Path -Leaf $InputDir
+    if ($leaf -match '^net') {
+        # parent of the framework folder (e.g. ...\Release)
+        $OutDir = Split-Path -Parent $InputDir
+    } else {
+        $OutDir = $InputDir
+    }
+}
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Null }
 
 $zipName = "DS4Updater_${Version}_${Arch}.zip"

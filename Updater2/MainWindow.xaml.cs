@@ -58,10 +58,8 @@ namespace DS4Updater
         public bool autoLaunchDS4W = false;
         public bool forceLaunchDS4WUser = false;
         internal string arch = Environment.Is64BitProcess ? "x64" : "x86";
-        // Base GitHub repo URL for releases (can be overridden via command-line)
-        private string baseRepoUrl = "https://github.com/schmaldeo/DS4Windows";
-        // API URL to fetch latest release info (adjusted when baseRepoUrl is overridden)
-        private string apiLatestUrl = "https://api.github.com/repos/schmaldeo/DS4Windows/releases/latest";
+        // Repo configuration (base URL and derived API URL)
+        private RepoConfig repoConfig;
         private string custom_exe_name_path;
         public string CustomExeNamePath { get => custom_exe_name_path; }
 
@@ -94,36 +92,8 @@ namespace DS4Updater
             wc.DefaultRequestHeaders.Add("User-Agent", "DS4Windows Updater");
 
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-            // Allow overriding the base repository URL via command-line arguments.
-            // Usage examples:
-            //  --base-url https://github.com/youruser/DS4Windows
-            //  --base-url=https://github.com/youruser/DS4Windows
-            var cmdArgs = Environment.GetCommandLineArgs();
-            for (int ai = 1; ai < cmdArgs.Length; ai++)
-            {
-                var a = cmdArgs[ai];
-                if (a.StartsWith("--base-url=", StringComparison.OrdinalIgnoreCase))
-                {
-                    baseRepoUrl = a.Substring("--base-url=".Length).Trim();
-                }
-                else if (a.Equals("--base-url", StringComparison.OrdinalIgnoreCase) && ai + 1 < cmdArgs.Length)
-                {
-                    baseRepoUrl = cmdArgs[++ai].Trim();
-                }
-                else if (ai == 1 && Uri.IsWellFormedUriString(a, UriKind.Absolute) && a.Contains("github.com"))
-                {
-                    baseRepoUrl = a.Trim();
-                }
-            }
-
-            baseRepoUrl = baseRepoUrl?.TrimEnd('/') ?? baseRepoUrl;
-            var m = Regex.Match(baseRepoUrl, @"github\.com/([^/]+)/([^/]+)", RegexOptions.IgnoreCase);
-            if (m.Success)
-            {
-                var owner = m.Groups[1].Value;
-                var repo = m.Groups[2].Value;
-                apiLatestUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
-            }
+            // Determine repository configuration (may be overridden by command-line)
+            repoConfig = RepoConfig.FromEnvironmentArgs();
             if (File.Exists(exepath + "\\DS4Windows.exe"))
                 version = FileVersionInfo.GetVersionInfo(exepath + "\\DS4Windows.exe").FileVersion;
 
@@ -176,7 +146,7 @@ namespace DS4Updater
 
                 if (!downloading && version.Replace(',', '.').CompareTo(newversion) != 0)
                 {
-                    Uri url = new Uri($"{baseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                    Uri url = new Uri($"{repoConfig.BaseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
                     sw.Start();
                     outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
                     StartAppArchiveDownload(url, outputUpdatePath);
@@ -260,7 +230,8 @@ namespace DS4Updater
 
         private void StartVersionFileDownload()
         {
-            Uri urlv = new Uri(apiLatestUrl);
+            if (string.IsNullOrEmpty(repoConfig?.ApiLatestUrl)) return;
+            Uri urlv = new Uri(repoConfig.ApiLatestUrl);
             //Sorry other devs, gonna have to find your own server
             downloading = true;
 
@@ -313,7 +284,7 @@ namespace DS4Updater
             File.Delete(Path.Combine(exepath, "version.txt"));
             if (version.Replace(',', '.').CompareTo(newversion) != 0)
             {
-                Uri url = new Uri($"{baseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                Uri url = new Uri($"{repoConfig.BaseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
                 sw.Start();
                 outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
 
@@ -687,7 +658,7 @@ namespace DS4Updater
             }
             else if (!backup)
             {
-                Uri url = new Uri($"{baseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                Uri url = new Uri($"{repoConfig.BaseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
 
                 sw.Start();
                 outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
