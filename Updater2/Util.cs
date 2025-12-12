@@ -45,6 +45,7 @@ namespace DS4Updater
                         Verb = "runas",
                         WorkingDirectory = workingDirectory ?? Path.GetDirectoryName(path)
                     };
+                        Logger.Log($"StartProcessDetached: starting elevated process. FileName={psi.FileName}, WorkingDirectory={psi.WorkingDirectory}, UseShellExecute={psi.UseShellExecute}, Verb={psi.Verb}, Arguments={psi.Arguments}");
                     using (Process p = Process.Start(psi)) { }
                     return;
                 }
@@ -56,6 +57,7 @@ namespace DS4Updater
                     try
                     {
                         var psi2 = new ProcessStartInfo("explorer.exe") { Arguments = path, UseShellExecute = true };
+                            Logger.Log($"StartProcessDetached: fallback to explorer. FileName={psi2.FileName}, Arguments={psi2.Arguments}, UseShellExecute={psi2.UseShellExecute}");
                         using (Process p2 = Process.Start(psi2)) { }
                     }
                     catch
@@ -118,6 +120,7 @@ namespace DS4Updater
                 StringBuilder cmd = new StringBuilder();
                 cmd.Append('"').Append(applicationPath).Append('"');
                 if (!string.IsNullOrEmpty(arguments)) { cmd.Append(' ').Append(arguments); }
+                    Logger.Log($"StartProcessAsShellUser: CreateProcessAsUser cmd={cmd.ToString()}, workingDirectory={workingDirectory}");
 
                 uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
                 uint CREATE_NEW_CONSOLE = 0x00000010;

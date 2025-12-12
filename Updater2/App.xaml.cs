@@ -216,14 +216,16 @@ namespace DS4Updater
                 if (!string.IsNullOrEmpty(mwd.PreferredLaunchMode))
                 {
                     bool runAsAdmin = string.Equals(mwd.PreferredLaunchMode, "admin", StringComparison.OrdinalIgnoreCase);
+                    Logger.Log($"AutoOpenDS4: launching with PreferredLaunchMode mode={mwd.PreferredLaunchMode}, path={finalLaunchExePath}, workingDir={exedirpath}, runAsAdmin={runAsAdmin}");
                     Util.StartProcessDetached(finalLaunchExePath, runAsAdmin, exedirpath);
-                    Logger.Log($"Auto-launch DS4Windows (preferred mode): {finalLaunchExePath} mode={mwd.PreferredLaunchMode}");
+                    Logger.Log($"Auto-launch DS4Windows (preferred mode) initiated: {finalLaunchExePath} mode={mwd.PreferredLaunchMode}");
                 }
                 else if (mwd.forceLaunchDS4WUser)
                 {
                     // Attempt to launch program as a normal user via shell token
-                    Util.StartProcessInExplorer(finalLaunchExePath);
-                    Logger.Log($"Auto-launch DS4Windows via explorer: {finalLaunchExePath}");
+                    Logger.Log($"AutoOpenDS4: launching via Explorer token: path={finalLaunchExePath}");
+                    Util.StartProcessInExplorer(finalLaunchExePath, exedirpath);
+                    Logger.Log($"Auto-launch DS4Windows via explorer initiated: {finalLaunchExePath}");
                 }
                 else
                 {
@@ -231,7 +233,7 @@ namespace DS4Updater
                     startInfo.WorkingDirectory = exedirpath;
                     using (Process tempProc = Process.Start(startInfo))
                     {
-                        Logger.Log($"Auto-launch DS4Windows: {finalLaunchExePath}");
+                        Logger.Log($"Auto-launch DS4Windows via Process.Start: FileName={startInfo.FileName}, WorkingDirectory={startInfo.WorkingDirectory}, UseShellExecute={startInfo.UseShellExecute}, Arguments={startInfo.Arguments}");
                     }
                 }
             }
