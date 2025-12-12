@@ -3,7 +3,7 @@ DS4Updater
 Copyright (C) 2023  Travis Nickles
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+    #pragma warning restore CS4014
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
@@ -36,6 +36,7 @@ using System.Windows.Shell;
 
 namespace DS4Updater
 {
+    #pragma warning disable CS4014 // suppress warnings for intentional fire-and-forget Tasks
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
@@ -57,6 +58,10 @@ namespace DS4Updater
         public bool autoLaunchDS4W = false;
         public bool forceLaunchDS4WUser = false;
         internal string arch = Environment.Is64BitProcess ? "x64" : "x86";
+        // Base GitHub repo URL for releases (can be overridden via command-line)
+        private string baseRepoUrl = "https://github.com/schmaldeo/DS4Windows";
+        // API URL to fetch latest release info (adjusted when baseRepoUrl is overridden)
+        private string apiLatestUrl = "https://api.github.com/repos/schmaldeo/DS4Windows/releases/latest";
         private string custom_exe_name_path;
         public string CustomExeNamePath { get => custom_exe_name_path; }
 
@@ -81,6 +86,7 @@ namespace DS4Updater
             }
         }
 
+
         public MainWindow()
         {
             InitializeComponent();
@@ -88,6 +94,36 @@ namespace DS4Updater
             wc.DefaultRequestHeaders.Add("User-Agent", "DS4Windows Updater");
 
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            // Allow overriding the base repository URL via command-line arguments.
+            // Usage examples:
+            //  --base-url https://github.com/youruser/DS4Windows
+            //  --base-url=https://github.com/youruser/DS4Windows
+            var cmdArgs = Environment.GetCommandLineArgs();
+            for (int ai = 1; ai < cmdArgs.Length; ai++)
+            {
+                var a = cmdArgs[ai];
+                if (a.StartsWith("--base-url=", StringComparison.OrdinalIgnoreCase))
+                {
+                    baseRepoUrl = a.Substring("--base-url=".Length).Trim();
+                }
+                else if (a.Equals("--base-url", StringComparison.OrdinalIgnoreCase) && ai + 1 < cmdArgs.Length)
+                {
+                    baseRepoUrl = cmdArgs[++ai].Trim();
+                }
+                else if (ai == 1 && Uri.IsWellFormedUriString(a, UriKind.Absolute) && a.Contains("github.com"))
+                {
+                    baseRepoUrl = a.Trim();
+                }
+            }
+
+            baseRepoUrl = baseRepoUrl?.TrimEnd('/') ?? baseRepoUrl;
+            var m = Regex.Match(baseRepoUrl, @"github\.com/([^/]+)/([^/]+)", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                var owner = m.Groups[1].Value;
+                var repo = m.Groups[2].Value;
+                apiLatestUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
+            }
             if (File.Exists(exepath + "\\DS4Windows.exe"))
                 version = FileVersionInfo.GetVersionInfo(exepath + "\\DS4Windows.exe").FileVersion;
 
@@ -140,7 +176,7 @@ namespace DS4Updater
 
                 if (!downloading && version.Replace(',', '.').CompareTo(newversion) != 0)
                 {
-                    Uri url = new Uri($"https://github.com/schmaldeo/DS4Windows/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                    Uri url = new Uri($"{baseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
                     sw.Start();
                     outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
                     StartAppArchiveDownload(url, outputUpdatePath);
@@ -161,7 +197,7 @@ namespace DS4Updater
 
         private void StartAppArchiveDownload(Uri url, string outputUpdatePath)
         {
-            Task.Run(async () =>
+            _ = Task.Run(async () =>
             {
                 try
                 {
@@ -224,12 +260,12 @@ namespace DS4Updater
 
         private void StartVersionFileDownload()
         {
-            Uri urlv = new Uri("https://api.github.com/repos/schmaldeo/DS4Windows/releases/latest");
+            Uri urlv = new Uri(apiLatestUrl);
             //Sorry other devs, gonna have to find your own server
             downloading = true;
 
             label1.Content = "Getting Update info";
-            Task.Run(async () =>
+            _ = Task.Run(async () =>
             {
                 try
                 {
@@ -277,7 +313,7 @@ namespace DS4Updater
             File.Delete(Path.Combine(exepath, "version.txt"));
             if (version.Replace(',', '.').CompareTo(newversion) != 0)
             {
-                Uri url = new Uri($"https://github.com/schmaldeo/DS4Windows/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                Uri url = new Uri($"{baseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
                 sw.Start();
                 outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
 
@@ -328,7 +364,7 @@ namespace DS4Updater
                     }
                     //});
                 };
-                currentTask?.Invoke();
+                _ = currentTask?.Invoke();
                 //wc.DownloadFileCompleted += wc_DownloadFileCompleted;
                 //wc.DownloadProgressChanged += wc_DownloadProgressChanged;
             }
@@ -354,7 +390,7 @@ namespace DS4Updater
                         btnOpenDS4.IsEnabled = false;
                     });
 
-                    Task.Delay(5000).ContinueWith((t) =>
+                    _ = Task.Delay(5000).ContinueWith((t) =>
                     {
                         PrepareAutoOpenDS4();
                     });
@@ -651,7 +687,7 @@ namespace DS4Updater
             }
             else if (!backup)
             {
-                Uri url = new Uri($"https://github.com/schmaldeo/DS4Windows/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                Uri url = new Uri($"{baseRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
 
                 sw.Start();
                 outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
