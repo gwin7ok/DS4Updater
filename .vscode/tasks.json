@@ -52,7 +52,21 @@
                 "reveal": "always",
                 "panel": "shared"
             }
+        },
+        {
+            "label": "release-tag-and-push-short",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "./scripts/release-tag.ps1",
+                "-WithV"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
         }
-    ],
-    
+    ]
 }
