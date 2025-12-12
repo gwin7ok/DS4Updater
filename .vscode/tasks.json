@@ -29,6 +29,18 @@
             "dependsOn": "Publish Updater2 x64"
         },
         {
+            "label": "Publish: (Release win-x64)",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Publish Updater2 x64",
+                "post-build-updater2"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
             "label": "release: publish-and-create-release",
             "type": "shell",
             "command": "pwsh",
