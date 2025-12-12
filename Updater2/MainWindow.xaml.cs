@@ -525,23 +525,12 @@ namespace DS4Updater
                 }
                 catch { }
 
-                if (autoLaunchDS4W)
+                // Do not auto-launch after check; enable Run button for user to start DS4Windows
+                Application.Current.Dispatcher.Invoke(() =>
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        label1.Text = "Launching DS4Windows soon";
-                        btnOpenDS4.IsEnabled = false;
-                    });
-
-                    _ = Task.Delay(5000).ContinueWith((t) =>
-                    {
-                        PrepareAutoOpenDS4();
-                    });
-                }
-                else
-                {
+                    label1.Text = "DS4Windows is up to date. Click 'Run DS4Windows' to start.";
                     btnOpenDS4.IsEnabled = true;
-                }
+                });
             }
         }
 
@@ -847,19 +836,9 @@ namespace DS4Updater
                 UpdaterBar.Value = 106;
                 TaskbarItemInfo.ProgressState = TaskbarItemProgressState.None;
 
-                if (autoLaunchDS4W)
-                {
-                    label1.Text = "Launching DS4Windows soon";
-                    btnOpenDS4.IsEnabled = false;
-                    Task.Delay(5000).ContinueWith((t) =>
-                    {
-                        PrepareAutoOpenDS4();
-                    });
-                }
-                else
-                {
-                    btnOpenDS4.IsEnabled = true;
-                }
+                // After update install, do not auto-launch; enable Run button so user can start DS4Windows when ready
+                label1.Text = "DS4Windows has been updated. Click 'Run DS4Windows' to start.";
+                btnOpenDS4.IsEnabled = true;
             }
             else if (!backup)
             {
@@ -993,14 +972,7 @@ namespace DS4Updater
             }
         }
 
-        private void PrepareAutoOpenDS4()
-        {
-            App.openingDS4W = true;
-            Dispatcher.BeginInvoke((Action)(() =>
-            {
-                this.Close();
-            }));
-        }
+        // Auto-open helper removed; Run action now requires user to click the Run button.
     }
 }
 
