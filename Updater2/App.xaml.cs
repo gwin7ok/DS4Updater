@@ -44,6 +44,9 @@ namespace DS4Updater
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
             mwd = new MainWindow();
+            // allow overriding paths via args
+            string ds4windowsPath = null;
+            string ds4updaterPath = null;
             launchExePath = Path.Combine(exedirpath, "DS4Windows.exe");
             for (int i=0, arlen = e.Args.Length; i < arlen; i++)
             {
@@ -74,6 +77,22 @@ namespace DS4Updater
                         }
                     }
                 }
+                else if (temp.StartsWith("--ds4windows-path=", StringComparison.OrdinalIgnoreCase))
+                {
+                    ds4windowsPath = temp.Substring("--ds4windows-path=".Length).Trim();
+                }
+                else if (temp.Equals("--ds4windows-path", StringComparison.OrdinalIgnoreCase) && i + 1 < arlen)
+                {
+                    ds4windowsPath = e.Args[++i];
+                }
+                else if (temp.StartsWith("--ds4updater-path=", StringComparison.OrdinalIgnoreCase))
+                {
+                    ds4updaterPath = temp.Substring("--ds4updater-path=".Length).Trim();
+                }
+                else if (temp.Equals("--ds4updater-path", StringComparison.OrdinalIgnoreCase) && i + 1 < arlen)
+                {
+                    ds4updaterPath = e.Args[++i];
+                }
             }
 
             // Inject parsed repo configuration (ds4updater and ds4windows repos)
@@ -83,6 +102,14 @@ namespace DS4Updater
                 mwd.SetRepoConfig(cfg);
             }
             catch { }
+
+            // If updater path provided, make it the exe dir used for self-update tasks
+            try { if (!string.IsNullOrEmpty(ds4updaterPath)) exedirpath = Path.GetFullPath(ds4updaterPath); } catch { }
+            // If ds4windows path provided, prefer that for launching DS4Windows
+            try { if (!string.IsNullOrEmpty(ds4windowsPath)) launchExePath = Path.Combine(Path.GetFullPath(ds4windowsPath), "DS4Windows.exe"); } catch { }
+
+            // Pass paths into MainWindow so file operations target correct roots
+            try { mwd.SetPaths(ds4windowsPath, ds4updaterPath); } catch { }
 
             mwd.Show();
         }

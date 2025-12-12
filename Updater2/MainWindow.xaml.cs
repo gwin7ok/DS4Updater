@@ -47,7 +47,9 @@ namespace DS4Updater
         private HttpClient wc = new HttpClient();
         protected string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "DS4Windows");
-        string exepath = AppContext.BaseDirectory;
+        // Paths: ds4UpdaterDir is where DS4Updater.exe resides; ds4WindowsDir is the DS4Windows program folder root.
+        string ds4UpdaterDir = AppContext.BaseDirectory;
+        string ds4WindowsDir = AppContext.BaseDirectory;
         string version = "0", newversion = "0";
         bool downloading = false;
         private int round = 1;
@@ -72,10 +74,10 @@ namespace DS4Updater
         {
             try
             {
-                File.WriteAllText(exepath + "\\test.txt", "test");
+                File.WriteAllText(Path.Combine(ds4UpdaterDir, "test.txt"), "test");
                 // Add a small sleep period as a pre-caution
                 Thread.Sleep(20);
-                File.Delete(exepath + "\\test.txt");
+                File.Delete(Path.Combine(ds4UpdaterDir, "test.txt"));
                 return false;
             }
             catch (UnauthorizedAccessException)
@@ -94,18 +96,18 @@ namespace DS4Updater
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
             // Determine repository configuration (may be overridden by command-line)
             repoConfig = RepoConfig.FromEnvironmentArgs();
-            if (File.Exists(exepath + "\\DS4Windows.exe"))
-                version = FileVersionInfo.GetVersionInfo(exepath + "\\DS4Windows.exe").FileVersion;
+            if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")))
+                version = FileVersionInfo.GetVersionInfo(Path.Combine(ds4WindowsDir, "DS4Windows.exe")).FileVersion;
 
             if (AdminNeeded())
                 label1.Content = "Please re-run with admin rights";
             else
             {
-                custom_exe_name_path = Path.Combine(exepath, CUSTOM_EXE_CONFIG_FILENAME);
+                custom_exe_name_path = Path.Combine(ds4UpdaterDir, CUSTOM_EXE_CONFIG_FILENAME);
 
                 try
                 {
-                    string[] files = Directory.GetFiles(exepath);
+                    string[] files = Directory.GetFiles(ds4WindowsDir);
 
                     for (int i = 0, arlen = files.Length; i < arlen; i++)
                     {
@@ -116,27 +118,27 @@ namespace DS4Updater
                         }
                     }
 
-                    if (Directory.Exists(exepath + "\\Update Files"))
-                        Directory.Delete(exepath + "\\Update Files", true);
+                    if (Directory.Exists(Path.Combine(ds4WindowsDir, "Update Files")))
+                        Directory.Delete(Path.Combine(ds4WindowsDir, "Update Files"), true);
 
-                    if (!Directory.Exists(Path.Combine(exepath, "Updates")))
-                        Directory.CreateDirectory(Path.Combine(exepath, "Updates"));
+                    if (!Directory.Exists(Path.Combine(ds4WindowsDir, "Updates")))
+                        Directory.CreateDirectory(Path.Combine(ds4WindowsDir, "Updates"));
 
-                    updatesFolder = Path.Combine(exepath, "Updates");
+                    updatesFolder = Path.Combine(ds4WindowsDir, "Updates");
                 }
                 catch (IOException) { label1.Content = "Cannot save download at this time"; return; }
 
-                if (File.Exists(exepath + "\\Profiles.xml"))
-                    path = exepath;
+                if (File.Exists(Path.Combine(ds4WindowsDir, "Profiles.xml")))
+                    path = ds4WindowsDir;
 
                 if (File.Exists(path + "\\version.txt"))
                 {
                     newversion = File.ReadAllText(path + "\\version.txt");
                     newversion = newversion.Trim();
                 }
-                else if (File.Exists(exepath + "\\version.txt"))
+                else if (File.Exists(Path.Combine(ds4WindowsDir, "version.txt")))
                 {
-                    newversion = File.ReadAllText(exepath + "\\version.txt");
+                    newversion = File.ReadAllText(Path.Combine(ds4WindowsDir, "version.txt"));
                     newversion = newversion.Trim();
                 }
                 else
@@ -157,7 +159,7 @@ namespace DS4Updater
                     try
                     {
                         File.Delete(path + "\\version.txt");
-                        File.Delete(exepath + "\\version.txt");
+                        File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
                     }
                     catch { }
                     btnOpenDS4.IsEnabled = true;
@@ -172,6 +174,22 @@ namespace DS4Updater
             {
                 repoConfig = config;
             }
+        }
+
+        // Allow external callers to set DS4Windows program folder and Updater folder.
+        public void SetPaths(string ds4WindowsPath, string ds4UpdaterPath)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(ds4UpdaterPath)) ds4UpdaterDir = Path.GetFullPath(ds4UpdaterPath);
+            }
+            catch { }
+
+            try
+            {
+                if (!string.IsNullOrEmpty(ds4WindowsPath)) ds4WindowsDir = Path.GetFullPath(ds4WindowsPath);
+            }
+            catch { }
         }
 
         private void StartAppArchiveDownload(Uri url, string outputUpdatePath)
@@ -257,7 +275,7 @@ namespace DS4Updater
                     if (success)
                     {
                         var gitHubRelease = await response.Content.ReadFromJsonAsync<GitHubRelease>();
-                        string verPath = Path.Combine(exepath, "version.txt");
+                        string verPath = Path.Combine(ds4WindowsDir, "version.txt");
                         using (StreamWriter sw = new(verPath, false))
                         {
                             sw.Write(gitHubRelease.tag_name.Substring(1));
@@ -272,7 +290,7 @@ namespace DS4Updater
                             label1.Content = "Could not download update";
                         });
                     }
-                    //subwc.DownloadFileAsync(urlv, exepath + "\\version.txt");
+                    //subwc.DownloadFileAsync(urlv, Path.Combine(ds4WindowsDir, "version.txt"));
                     //subwc.DownloadFileCompleted += subwc_DownloadFileCompleted;
                 }
                 catch (HttpRequestException e)
@@ -288,9 +306,9 @@ namespace DS4Updater
 
         private void subwc_DownloadFileCompleted()
         {
-            newversion = File.ReadAllText(Path.Combine(exepath, "version.txt"));
+            newversion = File.ReadAllText(Path.Combine(ds4WindowsDir, "version.txt"));
             newversion = newversion.Trim();
-            File.Delete(Path.Combine(exepath, "version.txt"));
+            File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
             if (version.Replace(',', '.').CompareTo(newversion) != 0)
             {
                 Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
@@ -358,7 +376,7 @@ namespace DS4Updater
                 try
                 {
                     File.Delete(Path.Combine(path, "version.txt"));
-                    File.Delete(Path.Combine(exepath + "version.txt"));
+                    File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
                 }
                 catch { }
 
@@ -485,14 +503,14 @@ namespace DS4Updater
                 UpdaterBar.Value = 102;
                 TaskbarItemInfo.ProgressValue = UpdaterBar.Value / 106d;
 
-                string libsPath = Path.Combine(exepath, "libs");
-                string oldLibsPath = Path.Combine(exepath, "oldlibs");
+                string libsPath = Path.Combine(ds4WindowsDir, "libs");
+                string oldLibsPath = Path.Combine(ds4WindowsDir, "oldlibs");
 
                 // Grab relative file paths to DLL files in the current install
-                string[] oldDLLFiles = Directory.GetDirectories(exepath, "*.dll", SearchOption.AllDirectories);
+                string[] oldDLLFiles = Directory.GetDirectories(ds4WindowsDir, "*.dll", SearchOption.AllDirectories);
                 for (int i = oldDLLFiles.Length - 1; i >= 0; i--)
                 {
-                    oldDLLFiles[i] = oldDLLFiles[i].Replace($"{exepath}", "");
+                    oldDLLFiles[i] = oldDLLFiles[i].Replace($"{ds4WindowsDir}", "");
                 }
 
                 try
@@ -505,11 +523,11 @@ namespace DS4Updater
 
                     string[] checkFiles = new string[]
                     {
-                        exepath + "\\DS4Windows.exe",
-                        exepath + "\\DS4Tool.exe",
-                        exepath + "\\DS4Control.dll",
-                        exepath + "\\DS4Library.dll",
-                        exepath + "\\HidLibrary.dll",
+                        Path.Combine(ds4WindowsDir, "DS4Windows.exe"),
+                        Path.Combine(ds4WindowsDir, "DS4Tool.exe"),
+                        Path.Combine(ds4WindowsDir, "DS4Control.dll"),
+                        Path.Combine(ds4WindowsDir, "DS4Library.dll"),
+                        Path.Combine(ds4WindowsDir, "HidLibrary.dll"),
                     };
 
                     foreach (string checkFile in checkFiles)
@@ -520,13 +538,13 @@ namespace DS4Updater
                         }
                     }
 
-                    string updateFilesDir = exepath + "\\Update Files";
+                    string updateFilesDir = Path.Combine(ds4WindowsDir, "Update Files");
                     if (Directory.Exists(updateFilesDir))
                     {
                         Directory.Delete(updateFilesDir);
                     }
 
-                    string[] updatefiles = Directory.GetFiles(exepath);
+                    string[] updatefiles = Directory.GetFiles(ds4WindowsDir);
                     for (int i = 0, arlen = updatefiles.Length; i < arlen; i++)
                     {
                         if (Path.GetExtension(updatefiles[i]) == ".ds4w" && File.Exists(updatefiles[i]))
@@ -541,14 +559,14 @@ namespace DS4Updater
 
                 try
                 {
-                    Directory.CreateDirectory(exepath + "\\Update Files");
-                    ZipFile.ExtractToDirectory(outputUpdatePath, exepath + "\\Update Files");
+                    Directory.CreateDirectory(Path.Combine(ds4WindowsDir, "Update Files"));
+                    ZipFile.ExtractToDirectory(outputUpdatePath, Path.Combine(ds4WindowsDir, "Update Files"));
                 }
                 catch (IOException) { }
 
                 try
                 {
-                    File.Delete(exepath + "\\version.txt");
+                    File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
                     File.Delete(path + "\\version.txt");
                 }
                 catch { }
@@ -556,11 +574,11 @@ namespace DS4Updater
                 // Add small sleep timer here as a pre-caution
                 Thread.Sleep(20);
 
-                string[] directories = Directory.GetDirectories(exepath + "\\Update Files\\DS4Windows", "*", SearchOption.AllDirectories);
+                string[] directories = Directory.GetDirectories(Path.Combine(ds4WindowsDir, "Update Files", "DS4Windows"), "*", SearchOption.AllDirectories);
                 for (int i = directories.Length - 1; i >= 0; i--)
                 {
-                    string relativePath = directories[i].Replace($"{exepath}\\Update Files\\DS4Windows\\", "");
-                    string tempDestPath = Path.Combine(exepath, relativePath);
+                    string relativePath = directories[i].Replace($"{ds4WindowsDir}\\Update Files\\DS4Windows\\", "");
+                    string tempDestPath = Path.Combine(ds4WindowsDir, relativePath);
                     if (!Directory.Exists(tempDestPath))
                     {
                         Directory.CreateDirectory(tempDestPath);
@@ -568,19 +586,19 @@ namespace DS4Updater
                 }
 
                 // Grab relative file paths to DLL files in the newer install
-                string[] newDLLFiles = Directory.GetFiles(exepath + "\\Update Files\\DS4Windows", "*.dll", SearchOption.AllDirectories);
+                string[] newDLLFiles = Directory.GetFiles(Path.Combine(ds4WindowsDir, "Update Files", "DS4Windows"), "*.dll", SearchOption.AllDirectories);
                 for (int i = newDLLFiles.Length - 1; i >= 0; i--)
                 {
-                    newDLLFiles[i] = newDLLFiles[i].Replace($"{exepath}\\Update Files\\DS4Windows\\", "");
+                    newDLLFiles[i] = newDLLFiles[i].Replace($"{ds4WindowsDir}\\Update Files\\DS4Windows\\", "");
                 }
 
-                string[] files = Directory.GetFiles(exepath + "\\Update Files\\DS4Windows", "*", SearchOption.AllDirectories);
+                string[] files = Directory.GetFiles(Path.Combine(ds4WindowsDir, "Update Files", "DS4Windows"), "*", SearchOption.AllDirectories);
                 for (int i = files.Length - 1; i >= 0; i--)
                 {
                     if (Path.GetFileNameWithoutExtension(files[i]) != "DS4Updater")
                     {
-                        string relativePath = files[i].Replace($"{exepath}\\Update Files\\DS4Windows\\", "");
-                        string tempDestPath = Path.Combine(exepath, relativePath);
+                        string relativePath = files[i].Replace($"{ds4WindowsDir}\\Update Files\\DS4Windows\\", "");
+                        string tempDestPath = Path.Combine(ds4WindowsDir, relativePath);
                         //string tempDestPath = $"{exepath}\\{Path.GetFileName(files[i])}";
                         if (File.Exists(tempDestPath))
                         {
@@ -607,15 +625,15 @@ namespace DS4Updater
                     }
                 }
 
-                string ds4winversion = FileVersionInfo.GetVersionInfo(exepath + "\\DS4Windows.exe").FileVersion;
-                if ((File.Exists(exepath + "\\DS4Windows.exe") || File.Exists(exepath + "\\DS4Tool.exe")) &&
+                string ds4winversion = FileVersionInfo.GetVersionInfo(Path.Combine(ds4WindowsDir, "DS4Windows.exe")).FileVersion;
+                if ((File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")) || File.Exists(Path.Combine(ds4WindowsDir, "DS4Tool.exe"))) &&
                     ds4winversion == newversion.Trim())
                 {
                     //File.Delete(exepath + $"\\DS4Windows_{newversion}_{arch}.zip");
                     //File.Delete(exepath + "\\" + lang + ".zip");
                     label1.Content = $"DS4Windows has been updated to v{newversion}";
                 }
-                else if (File.Exists(exepath + "\\DS4Windows.exe") || File.Exists(exepath + "\\DS4Tool.exe"))
+                else if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")) || File.Exists(Path.Combine(ds4WindowsDir, "DS4Tool.exe")))
                 {
                     label1.Content = "Could not replace DS4Windows, please manually unzip";
                 }
@@ -623,7 +641,7 @@ namespace DS4Updater
                     label1.Content = "Could not unpack zip, please manually unzip";
 
                 // Check for custom exe name setting
-                string custom_exe_name_path = Path.Combine(exepath, CUSTOM_EXE_CONFIG_FILENAME);
+                string custom_exe_name_path = Path.Combine(ds4UpdaterDir, CUSTOM_EXE_CONFIG_FILENAME);
                 bool fakeExeFileExists = File.Exists(custom_exe_name_path);
                 if (fakeExeFileExists)
                 {
@@ -632,13 +650,13 @@ namespace DS4Updater
                     // Attempt to copy executable and assembly config file
                     if (valid)
                     {
-                        string current_exe_location = Path.Combine(exepath, "DS4Windows.exe");
-                        string current_conf_file_path = Path.Combine(exepath, "DS4Windows.runtimeconfig.json");
-                        string current_deps_file_path = Path.Combine(exepath, "DS4Windows.deps.json");
+                        string current_exe_location = Path.Combine(ds4WindowsDir, "DS4Windows.exe");
+                        string current_conf_file_path = Path.Combine(ds4WindowsDir, "DS4Windows.runtimeconfig.json");
+                        string current_deps_file_path = Path.Combine(ds4WindowsDir, "DS4Windows.deps.json");
 
-                        string fake_exe_file = Path.Combine(exepath, $"{fake_exe_name}.exe");
-                        string fake_conf_file = Path.Combine(exepath, $"{fake_exe_name}.runtimeconfig.json");
-                        string fake_deps_file = Path.Combine(exepath, $"{fake_exe_name}.deps.json");
+                        string fake_exe_file = Path.Combine(ds4WindowsDir, $"{fake_exe_name}.exe");
+                        string fake_conf_file = Path.Combine(ds4WindowsDir, $"{fake_exe_name}.runtimeconfig.json");
+                        string fake_deps_file = Path.Combine(ds4WindowsDir, $"{fake_exe_name}.deps.json");
 
                         File.Copy(current_exe_location, fake_exe_file, true); // Copy exe file
 
@@ -694,7 +712,7 @@ namespace DS4Updater
                 label1.Content = "Could not download update";
                 try
                 {
-                    File.Delete(exepath + "\\version.txt");
+                    File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
                     File.Delete(path + "\\version.txt");
                 }
                 catch { }
@@ -718,10 +736,10 @@ namespace DS4Updater
 
         private void BtnOpenDS4_Click(object sender, RoutedEventArgs e)
         {
-            if (File.Exists(exepath + "\\DS4Windows.exe"))
-                Process.Start(exepath + "\\DS4Windows.exe");
+            if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")))
+                Process.Start(Path.Combine(ds4WindowsDir, "DS4Windows.exe"));
             else
-                Process.Start(exepath);
+                Process.Start(ds4WindowsDir);
 
             App.openingDS4W = true;
             this.Close();
