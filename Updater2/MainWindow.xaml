@@ -1,7 +1,7 @@
 ﻿<Window x:Name="DS4_Updater" x:Class="DS4Updater.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="DS4 Updater" Height="Auto" Width="408.566" SizeToContent="Height" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen">
+    Title="DS4 Updater" Height="Auto" Width="200" SizeToContent="Height" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen">
 
     <Window.TaskbarItemInfo>
         <TaskbarItemInfo ProgressValue="0" ProgressState="Normal"/>
@@ -22,10 +22,16 @@
 
             <ProgressBar x:Name="UpdaterBar" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="20" Margin="0,6,0,6" Maximum="106" />
 
-            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <Button x:Name="btnRetry" Content="Retry Download" Margin="0,0,8,0" Click="BtnRetry_Click" Visibility="Collapsed" />
-                <Button x:Name="btnChangelog" Content="View Changelog" Margin="0,0,8,0" Click="BtnChangelog_Click" />
-                <Button x:Name="btnOpenDS4" Content="Open DS4W" IsEnabled="False" Click="BtnOpenDS4_Click" Background="#FFF0F0F0" />
-            </StackPanel>
+            <WrapPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Stretch" VerticalAlignment="Center" ItemHeight="Auto">
+                <Button x:Name="btnRetry" Margin="0,0,8,0" Click="BtnRetry_Click" Visibility="Collapsed">
+                    <TextBlock Text="Retry Download" TextWrapping="Wrap" TextAlignment="Center" />
+                </Button>
+                <Button x:Name="btnChangelog" Margin="0,0,8,0" Click="BtnChangelog_Click">
+                    <TextBlock Text="View Changelog" TextWrapping="Wrap" TextAlignment="Center" />
+                </Button>
+                <Button x:Name="btnOpenDS4" IsEnabled="False" Click="BtnOpenDS4_Click" Background="#FFF0F0F0">
+                    <TextBlock Text="Open DS4W" TextWrapping="Wrap" TextAlignment="Center" />
+                </Button>
+            </WrapPanel>
         </Grid>
 </Window>
