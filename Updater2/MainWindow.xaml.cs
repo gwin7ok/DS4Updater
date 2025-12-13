@@ -281,8 +281,9 @@ namespace DS4Updater
                     }
                 }
 
-                if (Directory.Exists(Path.Combine(ds4WindowsDir, "Update Files")))
-                    Directory.Delete(Path.Combine(ds4WindowsDir, "Update Files"), true);
+                // Previously removed any existing ds4WindowsDir\"Update Files" directory here.
+                // Extraction now uses a temporary folder under `Updates`, so avoid deleting that path here to prevent
+                // accidental removal of files used by other flows.
 
                 if (!Directory.Exists(Path.Combine(ds4WindowsDir, "Updates")))
                     Directory.CreateDirectory(Path.Combine(ds4WindowsDir, "Updates"));
@@ -358,7 +359,6 @@ namespace DS4Updater
                                     wc_DownloadProgressChanged(new CopyProgress(totalBytesRead, contentLen));
                                 });
                             }
-                                Logger.Log($"StartAppArchiveDownload called. url={url} output={outputUpdatePath}");
                                 // hide retry button when (re)starting a download
                                 try { Application.Current.Dispatcher.Invoke(() => { btnRetry.Visibility = Visibility.Collapsed; }); } catch { }
                             if (downloadStream.CanSeek) downloadStream.Position = 0;
@@ -724,11 +724,11 @@ namespace DS4Updater
                 UpdaterBar.Value = 104;
                 TaskbarItemInfo.ProgressValue = UpdaterBar.Value / 106d;
 
+                // Extract into a temporary folder under the `Updates` folder, then move files into place.
+                string extractDir = Path.Combine(updatesFolder, $"Extract_{Guid.NewGuid()}");
+                Directory.CreateDirectory(extractDir);
                 try
                 {
-                    string extractDir = Path.Combine(ds4WindowsDir, "Update Files");
-                    Directory.CreateDirectory(extractDir);
-
                     using (var archive = ZipFile.OpenRead(outputUpdatePath))
                     {
                         foreach (var entry in archive.Entries)
@@ -769,10 +769,14 @@ namespace DS4Updater
                 // Add small sleep timer here as a pre-caution
                 Thread.Sleep(20);
 
-                string[] directories = Directory.GetDirectories(Path.Combine(ds4WindowsDir, "Update Files", "DS4Windows"), "*", SearchOption.AllDirectories);
+                // Determine extracted source directory (some zips include a top-level 'DS4Windows' folder)
+                string potentialTop = Path.Combine(extractDir, "DS4Windows");
+                string sourceDir = Directory.Exists(potentialTop) ? potentialTop : extractDir;
+
+                string[] directories = Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories);
                 for (int i = directories.Length - 1; i >= 0; i--)
                 {
-                    string relativePath = directories[i].Replace($"{ds4WindowsDir}\\Update Files\\DS4Windows\\", "");
+                    string relativePath = directories[i].Replace(sourceDir + Path.DirectorySeparatorChar, "");
                     string tempDestPath = Path.Combine(ds4WindowsDir, relativePath);
                     if (!Directory.Exists(tempDestPath))
                     {
@@ -781,20 +785,19 @@ namespace DS4Updater
                 }
 
                 // Grab relative file paths to DLL files in the newer install
-                string[] newDLLFiles = Directory.GetFiles(Path.Combine(ds4WindowsDir, "Update Files", "DS4Windows"), "*.dll", SearchOption.AllDirectories);
+                string[] newDLLFiles = Directory.GetFiles(sourceDir, "*.dll", SearchOption.AllDirectories);
                 for (int i = newDLLFiles.Length - 1; i >= 0; i--)
                 {
-                    newDLLFiles[i] = newDLLFiles[i].Replace($"{ds4WindowsDir}\\Update Files\\DS4Windows\\", "");
+                    newDLLFiles[i] = newDLLFiles[i].Replace(sourceDir + Path.DirectorySeparatorChar, "");
                 }
 
-                string[] files = Directory.GetFiles(Path.Combine(ds4WindowsDir, "Update Files", "DS4Windows"), "*", SearchOption.AllDirectories);
+                string[] files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories);
                 for (int i = files.Length - 1; i >= 0; i--)
                 {
                     if (Path.GetFileNameWithoutExtension(files[i]) != "DS4Updater")
                     {
-                        string relativePath = files[i].Replace($"{ds4WindowsDir}\\Update Files\\DS4Windows\\", "");
+                        string relativePath = files[i].Replace(sourceDir + Path.DirectorySeparatorChar, "");
                         string tempDestPath = Path.Combine(ds4WindowsDir, relativePath);
-                        //string tempDestPath = $"{exepath}\\{Path.GetFileName(files[i])}";
                         if (File.Exists(tempDestPath))
                         {
                             File.Delete(tempDestPath);
@@ -856,6 +859,17 @@ namespace DS4Updater
                     UpdaterResult.Message = "unpack_failed";
                     Logger.Log("Unpack failed: DS4Windows executable not found after extraction");
                 }
+
+                // Clean up extracted temporary folder (we keep the .zip in Updates)
+                try
+                {
+                    if (Directory.Exists(extractDir))
+                    {
+                        Directory.Delete(extractDir, true);
+                        Logger.Log($"Deleted temporary extract folder {extractDir}");
+                    }
+                }
+                catch (Exception ex) { Logger.LogException(ex, "Cleanup_ExtractDir"); }
 
                 // Check for custom exe name setting
                 string custom_exe_name_path = Path.Combine(ds4UpdaterDir, CUSTOM_EXE_CONFIG_FILENAME);
