@@ -281,6 +281,7 @@ namespace DS4Updater
                 if (release == null || string.IsNullOrEmpty(release.tag_name)) { Logger.Log("SelfUpdate: no release info"); return; }
 
                 string latestTag = release.tag_name.TrimStart('v');
+                Logger.Log($"SelfUpdate: latestTag={latestTag}");
                 // determine current exe/dll version
                 string fileName = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name + ".exe";
                 string exeFilePath = Path.Combine(AppContext.BaseDirectory, fileName);
@@ -308,15 +309,66 @@ namespace DS4Updater
                 }
                 catch { }
 
-                bool needUpdate = false;
-                if (Version.TryParse(latestTag, out var vLatest) && Version.TryParse(currentVersion, out var vCurrent))
+                Logger.Log($"SelfUpdate: exeFilePath={exeFilePath} exists={File.Exists(exeFilePath)}");
+                try { Logger.Log($"SelfUpdate: detected currentVersion raw='{currentVersion}'"); } catch { }
+
+                // Normalize version strings to first three numeric components for reliable comparison
+                static string NormalizeVersion(string v)
                 {
+                    if (string.IsNullOrEmpty(v)) return "0";
+                    // Keep digits and dots and trim leading non-digit
+                    var m = System.Text.RegularExpressions.Regex.Match(v, @"(\d+(?:\.\d+){0,3})");
+                    if (m.Success) return m.Groups[1].Value;
+                    return v;
+                }
+
+                string normLatest = NormalizeVersion(latestTag);
+                string normCurrent = NormalizeVersion(currentVersion);
+                Logger.Log($"SelfUpdate: normalized latest={normLatest} current={normCurrent}");
+
+                bool needUpdate = false;
+                bool parsedLatest = Version.TryParse(normLatest, out var vLatest);
+                bool parsedCurrent = Version.TryParse(normCurrent, out var vCurrent);
+                if (parsedLatest && parsedCurrent)
+                {
+                    Logger.Log($"SelfUpdate: parsed vLatest={vLatest} vCurrent={vCurrent}");
                     needUpdate = vLatest > vCurrent;
                 }
                 else
                 {
-                    needUpdate = !string.Equals(latestTag, currentVersion, StringComparison.OrdinalIgnoreCase);
+                    Logger.Log($"SelfUpdate: version parse failed parsedLatest={parsedLatest} parsedCurrent={parsedCurrent} normLatest={normLatest} normCurrent={normCurrent}");
+                    needUpdate = !string.Equals(normLatest, normCurrent, StringComparison.OrdinalIgnoreCase);
                 }
+
+                Logger.Log($"SelfUpdate: needUpdate={needUpdate}");
+
+                // If the executable or dll in the exe dir already matches or exceeds the latest, skip update
+                try
+                {
+                    string dllPath = Path.Combine(AppContext.BaseDirectory, System.Reflection.Assembly.GetExecutingAssembly().GetName().Name + ".dll");
+                    string observedVersion = null;
+                    if (File.Exists(exeFilePath)) observedVersion = FileVersionInfo.GetVersionInfo(exeFilePath).ProductVersion;
+                    else if (File.Exists(dllPath)) observedVersion = FileVersionInfo.GetVersionInfo(dllPath).ProductVersion;
+                    if (!string.IsNullOrEmpty(observedVersion))
+                    {
+                        var normObserved = NormalizeVersion(observedVersion);
+                        Logger.Log($"SelfUpdate: observed on-disk version={normObserved}");
+                        if (Version.TryParse(normLatest, out var vL) && Version.TryParse(normObserved, out var vObs))
+                        {
+                            if (vObs >= vL)
+                            {
+                                Logger.Log($"SelfUpdate: on-disk version ({normObserved}) >= latest ({normLatest}); skipping self-update");
+                                return;
+                            }
+                        }
+                        else if (string.Equals(normObserved, normLatest, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Logger.Log($"SelfUpdate: on-disk version equals latest; skipping self-update");
+                            return;
+                        }
+                    }
+                }
+                catch (Exception ex) { Logger.LogException(ex, "SelfUpdate_ObservedVersionCheck"); }
 
                 if (!needUpdate)
                 {
@@ -440,7 +492,8 @@ namespace DS4Updater
                     // If the new exe exists in Update Files, swap it in atomically
                     w.WriteLine($"if exist {quotedNew} (");
                     w.WriteLine($"    del /f /q {quotedCurrent} > nul 2>&1");
-                    w.WriteLine($"    ren {quotedNew} \"{fileName}\"");
+                    w.WriteLine($"    copy /y {quotedNew} {quotedCurrent} > nul 2>&1");
+                    w.WriteLine($"    del /f /q {quotedNew} > nul 2>&1");
                     w.WriteLine($"    start \"\" {quotedCurrent} {argline}");
                     w.WriteLine(") else (");
                     // If the new DLL exists, copy and start with dotnet
