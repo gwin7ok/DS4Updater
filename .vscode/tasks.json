@@ -21,7 +21,7 @@
                 "-NoProfile",
                 "-File",
                 "./scripts/post-build.ps1",
-                "${workspaceFolder}/Updater2/bin/x64/Release"
+                "${workspaceFolder}/Updater2/bin/x64/Release/net8.0-windows"
             ],
             "group": "build",
             "dependsOn": "Publish Updater2 x64"
