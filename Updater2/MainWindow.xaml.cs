@@ -233,70 +233,8 @@ namespace DS4Updater
             }
             else
             {
-                custom_exe_name_path = Path.Combine(ds4UpdaterDir, CUSTOM_EXE_CONFIG_FILENAME);
-
-                try
-                {
-                    string[] files = Directory.GetFiles(ds4WindowsDir);
-
-                    for (int i = 0, arlen = files.Length; i < arlen; i++)
-                    {
-                        string tempFile = Path.GetFileName(files[i]);
-                        if (new Regex(@"DS4Windows_[\w.]+_\w+.zip").IsMatch(tempFile))
-                        {
-                            File.Delete(files[i]);
-                        }
-                    }
-
-                    if (Directory.Exists(Path.Combine(ds4WindowsDir, "Update Files")))
-                        Directory.Delete(Path.Combine(ds4WindowsDir, "Update Files"), true);
-
-                    if (!Directory.Exists(Path.Combine(ds4WindowsDir, "Updates")))
-                        Directory.CreateDirectory(Path.Combine(ds4WindowsDir, "Updates"));
-
-                    updatesFolder = Path.Combine(ds4WindowsDir, "Updates");
-                }
-                catch (IOException ex) { Logger.LogException(ex, "CannotSaveDownload"); label1.Text = "Cannot save download at this time"; UpdaterResult.ExitCode = 4; UpdaterResult.Message = "cannot_save_download"; return; }
-
-                if (File.Exists(Path.Combine(ds4WindowsDir, "Profiles.xml")))
-                    path = ds4WindowsDir;
-
-                if (File.Exists(path + "\\version.txt"))
-                {
-                    newversion = File.ReadAllText(path + "\\version.txt");
-                    newversion = newversion.Trim();
-                }
-                else if (File.Exists(Path.Combine(ds4WindowsDir, "version.txt")))
-                {
-                    newversion = File.ReadAllText(Path.Combine(ds4WindowsDir, "version.txt"));
-                    newversion = newversion.Trim();
-                }
-                else
-                {
-                    StartVersionFileDownload();
-                }
-
-                if (!downloading && version.Replace(',', '.').CompareTo(newversion) != 0)
-                {
-                    Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
-                    sw.Start();
-                    outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
-                    StartAppArchiveDownload(url, outputUpdatePath);
-                }
-                else if (!downloading)
-                {
-                    label1.Text = "DS4Windows is up to date";
-                    UpdaterResult.ExitCode = 0;
-                    UpdaterResult.Message = "up_to_date";
-                    Logger.Log("No update required: up_to_date");
-                    try
-                    {
-                        File.Delete(path + "\\version.txt");
-                        File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
-                    }
-                    catch { }
-                    btnOpenDS4.IsEnabled = true;
-                }
+                // Moved initial heavy-lifting checks into StartInitialChecks() so App can inject repo/path
+                // configuration before any network/download activity begins.
             }
         }
 
@@ -323,6 +261,75 @@ namespace DS4Updater
                 if (!string.IsNullOrEmpty(ds4WindowsPath)) ds4WindowsDir = Path.GetFullPath(ds4WindowsPath);
             }
             catch { }
+        }
+
+        // Called by App after SetRepoConfig/SetPaths to start checks that require correct repo/path injection
+        public void StartInitialChecks()
+        {
+            custom_exe_name_path = Path.Combine(ds4UpdaterDir, CUSTOM_EXE_CONFIG_FILENAME);
+
+            try
+            {
+                string[] files = Directory.GetFiles(ds4WindowsDir);
+
+                for (int i = 0, arlen = files.Length; i < arlen; i++)
+                {
+                    string tempFile = Path.GetFileName(files[i]);
+                    if (new Regex(@"DS4Windows_[\w.]+_\w+.zip").IsMatch(tempFile))
+                    {
+                        File.Delete(files[i]);
+                    }
+                }
+
+                if (Directory.Exists(Path.Combine(ds4WindowsDir, "Update Files")))
+                    Directory.Delete(Path.Combine(ds4WindowsDir, "Update Files"), true);
+
+                if (!Directory.Exists(Path.Combine(ds4WindowsDir, "Updates")))
+                    Directory.CreateDirectory(Path.Combine(ds4WindowsDir, "Updates"));
+
+                updatesFolder = Path.Combine(ds4WindowsDir, "Updates");
+            }
+            catch (IOException ex) { Logger.LogException(ex, "CannotSaveDownload"); label1.Text = "Cannot save download at this time"; UpdaterResult.ExitCode = 4; UpdaterResult.Message = "cannot_save_download"; return; }
+
+            if (File.Exists(Path.Combine(ds4WindowsDir, "Profiles.xml")))
+                path = ds4WindowsDir;
+
+            if (File.Exists(path + "\\version.txt"))
+            {
+                newversion = File.ReadAllText(path + "\\version.txt");
+                newversion = newversion.Trim();
+            }
+            else if (File.Exists(Path.Combine(ds4WindowsDir, "version.txt")))
+            {
+                newversion = File.ReadAllText(Path.Combine(ds4WindowsDir, "version.txt"));
+                newversion = newversion.Trim();
+            }
+            else
+            {
+                StartVersionFileDownload();
+            }
+
+            if (!downloading && version.Replace(',', '.').CompareTo(newversion) != 0)
+            {
+                Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
+                sw.Start();
+                outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
+                StartAppArchiveDownload(url, outputUpdatePath);
+            }
+            else if (!downloading)
+            {
+                label1.Text = "DS4Windows is up to date";
+                UpdaterResult.ExitCode = 0;
+                UpdaterResult.Message = "up_to_date";
+                Logger.Log("No update required: up_to_date");
+                try
+                {
+                    File.Delete(path + "\\version.txt");
+                    File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
+                }
+                catch { }
+                btnOpenDS4.IsEnabled = true;
+            }
         }
 
         private void StartAppArchiveDownload(Uri url, string outputUpdatePath)

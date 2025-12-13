@@ -161,6 +161,9 @@ namespace DS4Updater
             try { if (cfg != null) mwd.SetRepoConfig(cfg); } catch { }
             try { mwd.SetPaths(ds4windowsPath, ds4updaterPath); } catch { }
 
+            // Ensure MainWindow starts initial checks only after repo/path were injected
+            try { mwd.StartInitialChecks(); } catch (Exception ex) { Logger.LogException(ex, "StartInitialChecks"); }
+
             mwd.Show();
             // If CI mode requested, don't show UI (but we still used MainWindow for logic)
             if (UpdaterResult.IsCiMode)
@@ -278,11 +281,32 @@ namespace DS4Updater
                 if (release == null || string.IsNullOrEmpty(release.tag_name)) { Logger.Log("SelfUpdate: no release info"); return; }
 
                 string latestTag = release.tag_name.TrimStart('v');
-                // determine current exe version
+                // determine current exe/dll version
                 string fileName = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name + ".exe";
                 string exeFilePath = Path.Combine(AppContext.BaseDirectory, fileName);
                 string currentVersion = "0";
-                try { currentVersion = FileVersionInfo.GetVersionInfo(exeFilePath).ProductVersion; } catch { }
+                try
+                {
+                    if (File.Exists(exeFilePath))
+                    {
+                        currentVersion = FileVersionInfo.GetVersionInfo(exeFilePath).ProductVersion;
+                    }
+                    else
+                    {
+                        // fallback: try assembly location (could be a .dll when run with `dotnet`) and assembly version
+                        var asmPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                        if (!string.IsNullOrEmpty(asmPath) && File.Exists(asmPath))
+                        {
+                            try { currentVersion = FileVersionInfo.GetVersionInfo(asmPath).ProductVersion; }
+                            catch { currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0"; }
+                        }
+                        else
+                        {
+                            currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0";
+                        }
+                    }
+                }
+                catch { }
 
                 bool needUpdate = false;
                 if (Version.TryParse(latestTag, out var vLatest) && Version.TryParse(currentVersion, out var vCurrent))
@@ -402,6 +426,8 @@ namespace DS4Updater
                     argline = string.Join(" ", originalArgs.Select(a => a.Contains(' ') ? "\"" + a + "\"" : a));
                 }
 
+                string newDllPath = Path.Combine(updateFilesDir, System.Reflection.Assembly.GetExecutingAssembly().GetName().Name + ".dll");
+
                 using (var w = new StreamWriter(new FileStream(tempBat, FileMode.Create, FileAccess.Write)))
                 {
                     w.WriteLine("@echo off");
@@ -410,9 +436,27 @@ namespace DS4Updater
                     w.WriteLine(":waitloop");
                     w.WriteLine($"tasklist /fi \"imagename eq {fileName}\" | find /i \"{fileName}\" > nul");
                     w.WriteLine("if %errorlevel%==0 ( timeout /t 1 /nobreak > nul & goto waitloop )");
-                    w.WriteLine($"del /f /q {quotedCurrent} > nul 2>&1");
-                    w.WriteLine($"ren {quotedNew} \"{fileName}\"");
-                    w.WriteLine($"start \"\" {quotedCurrent} {argline}");
+
+                    // If the new exe exists in Update Files, swap it in atomically
+                    w.WriteLine($"if exist {quotedNew} (");
+                    w.WriteLine($"    del /f /q {quotedCurrent} > nul 2>&1");
+                    w.WriteLine($"    ren {quotedNew} \"{fileName}\"");
+                    w.WriteLine($"    start \"\" {quotedCurrent} {argline}");
+                    w.WriteLine(") else (");
+                    // If the new DLL exists, copy and start with dotnet
+                    string quotedNewDll = "\"" + newDllPath + "\"";
+                    string destDll = Path.Combine(exedirpath, System.Reflection.Assembly.GetExecutingAssembly().GetName().Name + ".dll");
+                    string quotedDestDll = "\"" + destDll + "\"";
+                    w.WriteLine($"    if exist {quotedNewDll} (");
+                    w.WriteLine($"        copy /y {quotedNewDll} {quotedDestDll} > nul 2>&1");
+                    w.WriteLine($"        start \"\" dotnet {quotedDestDll} {argline}");
+                    w.WriteLine("    ) else (");
+                    // Fallback: try to start existing exe or dll if present
+                    string quotedExistingDll = "\"" + Path.Combine(exedirpath, System.Reflection.Assembly.GetExecutingAssembly().GetName().Name + ".dll") + "\"";
+                    w.WriteLine($"        if exist {quotedCurrent} ( start \"\" {quotedCurrent} {argline} ) else if exist {quotedExistingDll} ( start \"\" dotnet {quotedExistingDll} {argline} )");
+                    w.WriteLine("    )");
+                    w.WriteLine(")");
+
                     w.WriteLine($"del /f /q %~f0 > nul 2>&1");
                 }
 
