@@ -39,6 +39,8 @@ namespace DS4Updater
     {
         private string exedirpath = AppContext.BaseDirectory;
         public static bool openingDS4W;
+        // When true, do not delete Update Files on Exit because a replacer batch will use them
+        private bool skipUpdateFilesCleanupOnExit = false;
         private string launchExeName;
         private string launchExePath;
         private MainWindow mwd;
@@ -184,43 +186,25 @@ namespace DS4Updater
             //Debug.WriteLine(CultureInfo.CurrentCulture);
             this.Exit += (s, e) =>
             {
-                string currentUpdaterPath = Path.Combine(exedirpath, "Update Files", "DS4Windows", "DS4Updater.exe");
-                string tempNewUpdaterPath = Path.Combine(exedirpath, "DS4Updater NEW.exe");
-
-                string fileName = $"{Assembly.GetExecutingAssembly().GetName().Name}.exe";
-                string filePath = Path.Combine(AppContext.BaseDirectory, fileName);
-                FileVersionInfo fileVersion = FileVersionInfo.GetVersionInfo(filePath);
-                string version = fileVersion.ProductVersion;
-                if (File.Exists(exedirpath + "\\Update Files\\DS4Windows\\DS4Updater.exe")
-                    && FileVersionInfo.GetVersionInfo(exedirpath + "\\Update Files\\DS4Windows\\DS4Updater.exe").FileVersion.CompareTo(version) != 0)
+                try
                 {
-                    File.Move(currentUpdaterPath, tempNewUpdaterPath);
-                    //Directory.Delete(exepath + "\\Update Files", true);
-
-                    //string tempFilePath = Path.GetTempFileName();
-                    string tempFilePath = Path.Combine(Path.GetTempPath(), "UpdateReplacer.bat");
-                    using (StreamWriter w = new StreamWriter(new FileStream(tempFilePath,
-                        FileMode.Create, FileAccess.Write)))
+                    if (!skipUpdateFilesCleanupOnExit)
                     {
-                        w.WriteLine("@echo off"); // Turn off echo
-                        w.WriteLine("@echo Attempting to replace updater, please wait...");
-                        w.WriteLine("@ping -n 4 127.0.0.1 > nul"); //Its silly but its the most compatible way to call for a timeout in a batch file, used to give the main updater time to cleanup and exit.
-                        w.WriteLine("@del \"" + exedirpath + "\\DS4Updater.exe" + "\"");
-                        w.WriteLine("@ren \"" + exedirpath + "\\DS4Updater NEW.exe" + "\" \"DS4Updater.exe\"");
-                        w.Close();
+                        if (Directory.Exists(Path.Combine(exedirpath, "Update Files")))
+                        {
+                            Directory.Delete(Path.Combine(exedirpath, "Update Files"), true);
+                        }
                     }
-
-                    Process.Start(tempFilePath);
+                    else
+                    {
+                        Logger.Log("Exit: skipping Update Files cleanup due to pending self-update replacer");
+                    }
                 }
-                else if (File.Exists(tempNewUpdaterPath))
+                catch (Exception ex)
                 {
-                    File.Delete(tempNewUpdaterPath);
+                    Logger.LogException(ex, "Exit_CleanupUpdateFiles");
                 }
 
-                if (Directory.Exists(exedirpath + "\\Update Files"))
-                {
-                    Directory.Delete(exedirpath + "\\Update Files", true);
-                }
                 // Write CI result and set process exit code if requested
                 Logger.Log("Application exiting: cleaning up and writing result");
                 UpdaterResult.WriteAndApply();
@@ -434,6 +418,8 @@ namespace DS4Updater
 
                 Logger.Log($"SelfUpdate: starting replacer batch {tempBat} and exiting");
                 var psi = new ProcessStartInfo(tempBat) { UseShellExecute = true, WorkingDirectory = exedirpath };
+                // Prevent Exit handler from removing Update Files so batch can access the downloaded assets
+                try { skipUpdateFilesCleanupOnExit = true; } catch { }
                 Process.Start(psi);
 
                 // Exit current process so the replacer can swap files and restart new updater

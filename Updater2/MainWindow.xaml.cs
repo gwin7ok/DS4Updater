@@ -719,11 +719,38 @@ namespace DS4Updater
 
                 try
                 {
-                    Directory.CreateDirectory(Path.Combine(ds4WindowsDir, "Update Files"));
-                    ZipFile.ExtractToDirectory(outputUpdatePath, Path.Combine(ds4WindowsDir, "Update Files"));
+                    string extractDir = Path.Combine(ds4WindowsDir, "Update Files");
+                    Directory.CreateDirectory(extractDir);
+
+                    using (var archive = ZipFile.OpenRead(outputUpdatePath))
+                    {
+                        foreach (var entry in archive.Entries)
+                        {
+                            string destinationPath = Path.GetFullPath(Path.Combine(extractDir, entry.FullName));
+                            if (!destinationPath.StartsWith(Path.GetFullPath(extractDir), StringComparison.OrdinalIgnoreCase))
+                            {
+                                // Skip entries that would extract outside target (zip-slip protection)
+                                continue;
+                            }
+
+                            if (string.IsNullOrEmpty(entry.Name))
+                            {
+                                // Directory
+                                Directory.CreateDirectory(destinationPath);
+                                continue;
+                            }
+
+                            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));
+                            entry.ExtractToFile(destinationPath, true);
+                        }
+                    }
+
                     Logger.Log("Extraction complete");
                 }
-                catch (IOException ex) { Logger.LogException(ex, "ExtractToDirectory"); }
+                catch (IOException ex)
+                {
+                    Logger.LogException(ex, "ExtractToDirectory");
+                }
 
                 try
                 {
