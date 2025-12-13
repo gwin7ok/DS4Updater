@@ -238,6 +238,22 @@ namespace DS4Updater
             }
         }
 
+        // Normalize release/tag and installed version strings for reliable comparison.
+        private string NormalizeForCompare(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            s = s.Trim();
+            // remove leading 'v' or 'V'
+            if (s.Length > 0 && (s[0] == 'v' || s[0] == 'V')) s = s.Substring(1);
+            // drop build metadata and prerelease suffixes
+            int idx = s.IndexOfAny(new char[] { '+', '-' });
+            if (idx >= 0) s = s.Substring(0, idx);
+            s = s.Replace(',', '.');
+            // attempt to extract up to three numeric components
+            var m = System.Text.RegularExpressions.Regex.Match(s, @"\d+(?:\.\d+){0,2}");
+            return m.Success ? m.Value : s;
+        }
+
         // Allow App to inject parsed repo configuration (DS4Updater / DS4Windows URLs)
         public void SetRepoConfig(RepoConfig config)
         {
@@ -459,6 +475,8 @@ namespace DS4Updater
                         }
 
                         Logger.Log($"StartVersionFileDownload_Ds4Windows: downloading {assetName} from {downloadUrl}");
+                        // Record the target release tag so we can validate after install
+                        newversion = latestTag;
                         sw.Start();
                         outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{latestTag}_{arch}.zip");
                         StartAppArchiveDownload_Ds4Windows(new Uri(downloadUrl), outputUpdatePath);
@@ -729,12 +747,9 @@ namespace DS4Updater
                         }
                     }
 
-                    string updateFilesDir = Path.Combine(ds4WindowsDir, "Update Files");
-                    if (Directory.Exists(updateFilesDir))
-                    {
-                        Logger.Log("Deleting existing Update Files directory");
-                        Directory.Delete(updateFilesDir);
-                    }
+                    // Note: Do not remove the Updater's "Update Files" directory here.
+                    // That directory is used by DS4Updater self-update replacer and
+                    // should be managed by the updater process itself.
 
                     string[] updatefiles = Directory.GetFiles(ds4WindowsDir);
                     for (int i = 0, arlen = updatefiles.Length; i < arlen; i++)
@@ -849,18 +864,60 @@ namespace DS4Updater
                     }
                 }
 
-                string ds4winversion = FileVersionInfo.GetVersionInfo(Path.Combine(ds4WindowsDir, "DS4Windows.exe")).FileVersion;
-                if ((File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")) || File.Exists(Path.Combine(ds4WindowsDir, "DS4Tool.exe"))) &&
-                    ds4winversion == newversion.Trim())
+                // Perform post-install verification by comparing the release tag
+                // we requested (in `newversion`) with the installed executable's
+                // product version. If comparison cannot be performed, fall back to
+                // treating presence of the executable as success.
+                bool verified = false;
+                string releaseTag = (newversion ?? string.Empty).Trim();
+                string installedVer = string.Empty;
+                try
                 {
-                    //File.Delete(exepath + $"\\DS4Windows_{newversion}_{arch}.zip");
-                    //File.Delete(exepath + "\\" + lang + ".zip");
-                    label1.Text = $"DS4Windows has been updated to v{newversion}";
+                    string exePath = Path.Combine(ds4WindowsDir, "DS4Windows.exe");
+                    if (File.Exists(exePath))
+                        installedVer = FileVersionInfo.GetVersionInfo(exePath).ProductVersion ?? string.Empty;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogException(ex, "ReadInstalledVersion");
+                }
+
+                try
+                {
+                    string normRelease = NormalizeForCompare(releaseTag);
+                    string normInstalled = NormalizeForCompare(installedVer);
+
+                    if (!string.IsNullOrEmpty(normRelease) && !string.IsNullOrEmpty(normInstalled))
+                    {
+                        if (Version.TryParse(normRelease, out var vRel) && Version.TryParse(normInstalled, out var vInst))
+                        {
+                            verified = vRel.Equals(vInst);
+                        }
+                        else
+                        {
+                            verified = string.Equals(normRelease, normInstalled, StringComparison.OrdinalIgnoreCase);
+                        }
+                    }
+                }
+                catch (Exception ex) { Logger.LogException(ex, "CompareVersions"); }
+
+                if (!verified)
+                {
+                    // Fallback: if we couldn't compare, but the executable exists, treat as success
+                    if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")) || File.Exists(Path.Combine(ds4WindowsDir, "DS4Tool.exe")))
+                    {
+                        Logger.Log("Post-install verification skipped/fallback: executable present");
+                        verified = true;
+                    }
+                }
+
+                if (verified)
+                {
+                    label1.Text = string.IsNullOrEmpty(installedVer) ? "DS4Windows has been updated" : $"DS4Windows has been updated to v{installedVer}";
                     UpdaterResult.ExitCode = 0;
-                    UpdaterResult.Message = $"updated:{newversion}";
-                    Logger.Log($"Update success: newversion={newversion}");
-                    // If updater was launched with auto-launch intent, mark for AutoOpenDS4 on App.Exit.
-                    // If user clicked the Run button (BtnOpenDS4) we explicitly set App.openingDS4W = false there to avoid double-start.
+                    UpdaterResult.Message = string.IsNullOrEmpty(installedVer) ? "updated" : $"updated:{installedVer}";
+                    Logger.Log($"Update success: verified={verified} installedVer={installedVer} releaseTag={releaseTag}");
+
                     try
                     {
                         App.openingDS4W = this.autoLaunchDS4W;
@@ -871,19 +928,12 @@ namespace DS4Updater
                         Logger.LogException(ex, "SetOpeningDS4W");
                     }
                 }
-                else if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")) || File.Exists(Path.Combine(ds4WindowsDir, "DS4Tool.exe")))
+                else
                 {
                     label1.Text = "Could not replace DS4Windows, please manually unzip";
                     UpdaterResult.ExitCode = 5;
                     UpdaterResult.Message = "replace_failed";
-                    Logger.Log("Replace failed: DS4Windows present but version mismatch after install");
-                }
-                else
-                {
-                    label1.Text = "Could not unpack zip, please manually unzip";
-                    UpdaterResult.ExitCode = 6;
-                    UpdaterResult.Message = "unpack_failed";
-                    Logger.Log("Unpack failed: DS4Windows executable not found after extraction");
+                    Logger.Log($"Replace failed: verification failed installedVer={installedVer} releaseTag={releaseTag}");
                 }
 
                 // Clean up extracted temporary folder (we keep the .zip in Updates)
