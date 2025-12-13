@@ -72,8 +72,18 @@ if (-not $SkipBuild) {
         if ($LASTEXITCODE -ne 0) { Write-Error 'dotnet publish failed'; exit 4 }
     }
     Write-Host "Running post-build..."
-    if ($DryRun) { Write-Host "[DryRun] pwsh ./scripts/post-build.ps1 ./Updater2/bin/x64/Release/net8.0-windows . $version x64" }
-    else { pwsh -NoProfile -File ./scripts/post-build.ps1 ./Updater2/bin/x64/Release/net8.0-windows . $version x64; if ($LASTEXITCODE -ne 0) { Write-Error 'post-build failed'; exit 5 } }
+    # Try to determine release time from GitHub Actions event payload if available.
+    $releaseTime = $null
+    if ($env:GITHUB_EVENT_PATH -and (Test-Path $env:GITHUB_EVENT_PATH)) {
+        try {
+            $ev = Get-Content -Raw $env:GITHUB_EVENT_PATH | ConvertFrom-Json
+            if ($ev -and $ev.release -and $ev.release.published_at) { $releaseTime = $ev.release.published_at }
+        } catch { }
+    }
+    if (-not $releaseTime -and $env:RELEASE_TIME) { $releaseTime = $env:RELEASE_TIME }
+
+    if ($DryRun) { Write-Host "[DryRun] pwsh ./scripts/post-build.ps1 ./Updater2/bin/x64/Release/net8.0-windows . $version x64 '$releaseTime'" }
+    else { pwsh -NoProfile -File ./scripts/post-build.ps1 ./Updater2/bin/x64/Release/net8.0-windows . $version x64 $releaseTime; if ($LASTEXITCODE -ne 0) { Write-Error 'post-build failed'; exit 5 } }
 }
 
 # locate zips
