@@ -264,7 +264,8 @@ namespace DS4Updater
         }
 
         // Called by App after SetRepoConfig/SetPaths to start checks that require correct repo/path injection
-        public void StartInitialChecks()
+        // (renamed to include target suffix to clarify this is the DS4Windows flow)
+        public void StartInitialChecks_Ds4Windows()
         {
             custom_exe_name_path = Path.Combine(ds4UpdaterDir, CUSTOM_EXE_CONFIG_FILENAME);
 
@@ -307,7 +308,7 @@ namespace DS4Updater
             }
             else
             {
-                StartVersionFileDownload();
+                StartVersionFileDownload_Ds4Windows();
             }
 
             if (!downloading && version.Replace(',', '.').CompareTo(newversion) != 0)
@@ -315,14 +316,14 @@ namespace DS4Updater
                 Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
                 sw.Start();
                 outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
-                StartAppArchiveDownload(url, outputUpdatePath);
+                StartAppArchiveDownload_Ds4Windows(url, outputUpdatePath);
             }
             else if (!downloading)
             {
                 label1.Text = "DS4Windows is up to date";
                 UpdaterResult.ExitCode = 0;
                 UpdaterResult.Message = "up_to_date";
-                Logger.Log("No update required: up_to_date");
+                Logger.Log("StartInitialChecks_Ds4Windows: No update required: up_to_date");
                 try
                 {
                     File.Delete(path + "\\version.txt");
@@ -333,9 +334,9 @@ namespace DS4Updater
             }
         }
 
-        private void StartAppArchiveDownload(Uri url, string outputUpdatePath)
+        private void StartAppArchiveDownload_Ds4Windows(Uri url, string outputUpdatePath)
         {
-            Logger.Log($"StartAppArchiveDownload called. url={url} output={outputUpdatePath}");
+            Logger.Log($"StartAppArchiveDownload_Ds4Windows called. url={url} output={outputUpdatePath}");
             _ = Task.Run(async () =>
             {
                 try
@@ -356,7 +357,7 @@ namespace DS4Updater
                                 totalBytesRead += bytesRead;
                                 Application.Current.Dispatcher.BeginInvoke(() =>
                                 {
-                                    wc_DownloadProgressChanged(new CopyProgress(totalBytesRead, contentLen));
+                                    wc_DownloadProgressChanged_Ds4Windows(new CopyProgress(totalBytesRead, contentLen));
                                 });
                             }
                                 // hide retry button when (re)starting a download
@@ -370,10 +371,10 @@ namespace DS4Updater
 
                     if (success)
                     {
-                        Application.Current.Dispatcher.BeginInvoke(() =>
-                        {
-                            wc_DownloadFileCompleted();
-                        });
+                            Application.Current.Dispatcher.BeginInvoke(() =>
+                            {
+                                wc_DownloadFileCompleted_Ds4Windows();
+                            });
                     }
                     else
                     {
@@ -382,7 +383,7 @@ namespace DS4Updater
                             label1.Text = "Could not download update";
                             UpdaterResult.ExitCode = 2;
                             UpdaterResult.Message = "download_failed";
-                            Logger.Log($"Download failed (StartAppArchiveDownload) for url={url}");
+                            Logger.Log($"Download failed (StartAppArchiveDownload_Ds4Windows) for url={url}");
                             Logger.Log($"Download failed for url={url}");
                             try { btnRetry.Visibility = Visibility.Visible; } catch { }
                         });
@@ -397,22 +398,22 @@ namespace DS4Updater
                         label1.Text = "Could not download update";
                         UpdaterResult.ExitCode = 2;
                         UpdaterResult.Message = "download_failed";
-                        Logger.Log($"Download failed (StartAppArchiveDownload catch) for url={url}");
-                        Logger.LogException(ex, "StartAppArchiveDownload_HttpRequestException");
+                        Logger.Log($"Download failed (StartAppArchiveDownload_Ds4Windows catch) for url={url}");
+                        Logger.LogException(ex, "StartAppArchiveDownload_Ds4Windows_HttpRequestException");
                         try { btnRetry.Visibility = Visibility.Visible; } catch { }
                     });
                 }
-                catch (Exception e) { Logger.LogException(e, "StartAppArchiveDownload_General"); Application.Current.Dispatcher.Invoke(() => { label1.Text = e.Message; }); }
+                catch (Exception e) { Logger.LogException(e, "StartAppArchiveDownload_Ds4Windows_General"); Application.Current.Dispatcher.Invoke(() => { label1.Text = e.Message; }); }
                 //wc.DownloadFileCompleted += wc_DownloadFileCompleted;
                 //wc.DownloadProgressChanged += wc_DownloadProgressChanged;
             });
         }
 
-        private void StartVersionFileDownload()
+        private void StartVersionFileDownload_Ds4Windows()
         {
             if (string.IsNullOrEmpty(repoConfig?.DS4WindowsApiLatestUrl)) return;
             Uri urlv = new Uri(repoConfig.DS4WindowsApiLatestUrl);
-            Logger.Log($"StartVersionFileDownload called. url={urlv}");
+            Logger.Log($"StartVersionFileDownload_Ds4Windows called. url={urlv}");
             //Sorry other devs, gonna have to find your own server
             downloading = true;
 
@@ -429,13 +430,38 @@ namespace DS4Updater
                     if (success)
                     {
                         var gitHubRelease = await response.Content.ReadFromJsonAsync<GitHubRelease>();
-                        string verPath = Path.Combine(ds4WindowsDir, "version.txt");
-                        using (StreamWriter sw = new(verPath, false))
+                        if (gitHubRelease == null || string.IsNullOrEmpty(gitHubRelease.tag_name))
                         {
-                            sw.Write(gitHubRelease.tag_name.Substring(1));
+                            Logger.Log("StartVersionFileDownload_Ds4Windows: no release info");
+                            return;
                         }
 
-                        subwc_DownloadFileCompleted();
+                        // Instead of writing version.txt and comparing, always download the latest zip asset
+                        string latestTag = gitHubRelease.tag_name.TrimStart('v');
+                        string assetName = null;
+                        string downloadUrl = null;
+                        if (gitHubRelease.assets != null && gitHubRelease.assets.Length > 0)
+                        {
+                            var match = Array.Find(gitHubRelease.assets, a => !string.IsNullOrEmpty(a.name) && a.name.EndsWith($"_{arch}.zip", StringComparison.OrdinalIgnoreCase));
+                            if (match == null)
+                                match = Array.Find(gitHubRelease.assets, a => !string.IsNullOrEmpty(a.name) && a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                            if (match != null)
+                            {
+                                assetName = match.name;
+                                downloadUrl = match.browser_download_url;
+                            }
+                        }
+
+                        if (string.IsNullOrEmpty(downloadUrl))
+                        {
+                            Logger.Log("StartVersionFileDownload_Ds4Windows: no zip asset found for latest release");
+                            return;
+                        }
+
+                        Logger.Log($"StartVersionFileDownload_Ds4Windows: downloading {assetName} from {downloadUrl}");
+                        sw.Start();
+                        outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{latestTag}_{arch}.zip");
+                        StartAppArchiveDownload_Ds4Windows(new Uri(downloadUrl), outputUpdatePath);
                     }
                     else
                     {
@@ -446,11 +472,11 @@ namespace DS4Updater
                         });
                     }
                     //subwc.DownloadFileAsync(urlv, Path.Combine(ds4WindowsDir, "version.txt"));
-                    //subwc.DownloadFileCompleted += subwc_DownloadFileCompleted;
+                        //subwc.DownloadFileCompleted += subwc_DownloadFileCompleted_Ds4Windows;
                 }
                 catch (HttpRequestException e)
                 {
-                    Logger.LogException(e, "StartVersionFileDownload_HttpRequestException");
+                    Logger.LogException(e, "StartVersionFileDownload_Ds4Windows_HttpRequestException");
                     Application.Current.Dispatcher.Invoke(() =>
                     {
                         label1.Text = "Could not download update";
@@ -460,15 +486,15 @@ namespace DS4Updater
             });
         }
 
-        private void subwc_DownloadFileCompleted()
+        private void subwc_DownloadFileCompleted_Ds4Windows()
         {
-            Logger.Log("Version file downloaded; reading version.txt");
+            Logger.Log("subwc_DownloadFileCompleted_Ds4Windows: Version file downloaded; reading version.txt");
             newversion = File.ReadAllText(Path.Combine(ds4WindowsDir, "version.txt"));
             newversion = newversion.Trim();
             File.Delete(Path.Combine(ds4WindowsDir, "version.txt"));
             if (version.Replace(',', '.').CompareTo(newversion) != 0)
             {
-                Logger.Log($"New version available: {newversion} (current={version})");
+                Logger.Log($"subwc_DownloadFileCompleted_Ds4Windows: New version available: {newversion} (current={version})");
                 Uri url = new Uri($"{repoConfig.DS4WindowsRepoUrl}/releases/download/v{newversion}/DS4Windows_{newversion}_{arch}.zip");
                 sw.Start();
                 outputUpdatePath = Path.Combine(updatesFolder, $"DS4Windows_{newversion}_{arch}.zip");
@@ -497,7 +523,7 @@ namespace DS4Updater
                                     totalBytesRead += bytesRead;
                                     Application.Current.Dispatcher.BeginInvoke(() =>
                                     {
-                                        wc_DownloadProgressChanged(
+                                        wc_DownloadProgressChanged_Ds4Windows(
                                             new CopyProgress(totalBytesRead, contentLen));
                                     });
                                 }
@@ -511,7 +537,7 @@ namespace DS4Updater
 
                         if (success)
                         {
-                            Application.Current.Dispatcher.BeginInvoke(() => { wc_DownloadFileCompleted(); });
+                            Application.Current.Dispatcher.BeginInvoke(() => { wc_DownloadFileCompleted_Ds4Windows(); });
                         }
                     }
                     catch (Exception ec)
@@ -554,7 +580,7 @@ namespace DS4Updater
 
         Stopwatch sw = new Stopwatch();
 
-        private void wc_DownloadProgressChanged(CopyProgress e)
+        private void wc_DownloadProgressChanged_Ds4Windows(CopyProgress e)
         {
             label2.Opacity = 1;
             double speed = e.BytesTransferred / sw.Elapsed.TotalSeconds;
@@ -580,9 +606,9 @@ namespace DS4Updater
         }
 
         //private void wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
-        private async void wc_DownloadFileCompleted()
+        private async void wc_DownloadFileCompleted_Ds4Windows()
         {
-            Logger.Log($"wc_DownloadFileCompleted invoked; outputUpdatePath={outputUpdatePath}");
+            Logger.Log($"wc_DownloadFileCompleted_Ds4Windows invoked; outputUpdatePath={outputUpdatePath}");
             sw.Reset();
             string lang = CultureInfo.CurrentCulture.ToString();
 
@@ -926,7 +952,7 @@ namespace DS4Updater
                     }
                     //wc.DownloadFileAsync(url, outputUpdatePath);
                 }
-                catch (Exception ex) { Logger.LogException(ex, "BackupDownload"); Application.Current.Dispatcher.Invoke(() => { label1.Text = ex.Message; }); }
+                catch (Exception ex) { Logger.LogException(ex, "BackupDownload_Ds4Windows"); Application.Current.Dispatcher.Invoke(() => { label1.Text = ex.Message; }); }
                 backup = true;
             }
             else
@@ -981,8 +1007,8 @@ namespace DS4Updater
                 btnRetry.Visibility = Visibility.Collapsed;
                 label1.Text = "Retrying download...";
 
-                // Always fetch the latest release info first, then subwc_DownloadFileCompleted will trigger the archive download
-                StartVersionFileDownload();
+                // Always fetch the latest release info first, then subwc_DownloadFileCompleted_Ds4Windows will trigger the archive download
+                StartVersionFileDownload_Ds4Windows();
                 return;
             }
             catch (Exception ex)
@@ -1025,16 +1051,16 @@ namespace DS4Updater
 
         // Auto-open helper removed; Run action now requires user to click the Run button.
 
-        // Check GitHub releases latest for a newer version than the current installed one.
-        // This follows the reference logic provided by the user; SkipVersion behavior is intentionally omitted.
-        public bool CheckNewerVersionExists(out Version latest, bool allowCached = true)
+        // NOTE: DS4Windows local-version comparison removed. We still fetch latest
+        // release info to populate caches, but the app no longer decides updates
+        // based on a local version comparison — DS4Windows will always install
+        // the latest release when the update flow is invoked.
+        public bool CheckNewerVersionExists_Ds4Windows(out Version latest, bool allowCached = true)
         {
             latest = new Version(0, 0, 0);
 
-            // Parse current installed version
-            if (!Version.TryParse(version?.Replace(',', '.'), out var currentVersion)) return false;
-
-            // Use cache to reduce API calls
+            // If we have a cached result, return it (but callers should not rely
+            // on this boolean to gate installation anymore).
             if (allowCached && _newerVersionAvailableCache.HasValue)
             {
                 latest = _latestVersionCache;
@@ -1054,20 +1080,14 @@ namespace DS4Updater
                 string candidate = gh.tag_name.TrimStart('v').Replace(',', '.');
                 if (!Version.TryParse(candidate, out latest)) return false;
 
-                if (currentVersion < latest)
-                {
-                    _latestVersionCache = latest;
-                    _newerVersionAvailableCache = true;
-                    return true;
-                }
-
+                // Populate caches but do NOT perform a local version comparison here.
                 _latestVersionCache = latest;
                 _newerVersionAvailableCache = false;
                 return false;
             }
             catch (Exception ex)
             {
-                Logger.LogException(ex, "CheckNewerVersionExists");
+                Logger.LogException(ex, "CheckNewerVersionExists_Ds4Windows");
                 return false;
             }
         }

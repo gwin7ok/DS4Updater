@@ -134,24 +134,20 @@ namespace DS4Updater
             }
             catch { }
 
-            // If a newer DS4Updater release exists in the configured repo, download and replace self before continuing.
+            // If a newer DS4Updater release exists in the configured repo, perform SelfUpdate_Ds4Updater: download and replace self before continuing.
             try
             {
                 if (cfg != null)
                 {
-                    TrySelfUpdateAndRestartIfNeeded(cfg, e.Args);
+                    TrySelfUpdateAndRestartIfNeeded_Ds4Updater(cfg, e.Args);
                 }
             }
             catch (Exception ex)
             {
-                Logger.LogException(ex, "TrySelfUpdateAndRestartIfNeeded");
+                Logger.LogException(ex, "TrySelfUpdateAndRestartIfNeeded_Ds4Updater");
             }
-
-            // If ds4windows path provided, prefer that for launching DS4Windows
-            try { if (!string.IsNullOrEmpty(ds4windowsPath)) launchExePath = Path.Combine(Path.GetFullPath(ds4windowsPath), "DS4Windows.exe"); } catch { }
-
-            // Now create MainWindow and apply parsed options (only after self-update check completed)
-            mwd = new MainWindow();
+            // Ensure MainWindow instance exists before setting properties
+            try { mwd = new MainWindow(); } catch (Exception ex) { Logger.LogException(ex, "CreateMainWindow"); }
             mwd.downloadLang = parsedDownloadLang;
             mwd.autoLaunchDS4W = parsedAutoLaunch;
             mwd.forceLaunchDS4WUser = parsedForceLaunchUser;
@@ -162,7 +158,7 @@ namespace DS4Updater
             try { mwd.SetPaths(ds4windowsPath, ds4updaterPath); } catch { }
 
             // Ensure MainWindow starts initial checks only after repo/path were injected
-            try { mwd.StartInitialChecks(); } catch (Exception ex) { Logger.LogException(ex, "StartInitialChecks"); }
+            try { mwd.StartInitialChecks_Ds4Windows(); } catch (Exception ex) { Logger.LogException(ex, "StartInitialChecks_Ds4Windows"); }
 
             mwd.Show();
             // If CI mode requested, don't show UI (but we still used MainWindow for logic)
@@ -217,12 +213,12 @@ namespace DS4Updater
             {
                 if (openingDS4W)
                 {
-                    AutoOpenDS4();
+                    AutoOpenDS4_Ds4Windows();
                 }
             };
         }
 
-        private void AutoOpenDS4()
+        private void AutoOpenDS4_Ds4Windows()
         {
             string finalLaunchExePath = Path.Combine(exedirpath, "DS4Windows.exe");
             if (File.Exists(launchExePath))
@@ -264,24 +260,24 @@ namespace DS4Updater
             }
         }
 
-        private void TrySelfUpdateAndRestartIfNeeded(RepoConfig cfg, string[] originalArgs)
+        private void TrySelfUpdateAndRestartIfNeeded_Ds4Updater(RepoConfig cfg, string[] originalArgs)
         {
             try
             {
                 if (cfg == null || string.IsNullOrEmpty(cfg.DS4UpdaterApiLatestUrl)) return;
 
                 using HttpClient client = new HttpClient();
-                client.DefaultRequestHeaders.Add("User-Agent", "DS4Windows Updater SelfUpdate");
-                Logger.Log($"SelfUpdate: checking latest at {cfg.DS4UpdaterApiLatestUrl}");
+                client.DefaultRequestHeaders.Add("User-Agent", "DS4Windows Updater SelfUpdate_Ds4Updater");
+                Logger.Log($"SelfUpdate_Ds4Updater: checking latest at {cfg.DS4UpdaterApiLatestUrl}");
 
                 var resp = client.GetAsync(cfg.DS4UpdaterApiLatestUrl).GetAwaiter().GetResult();
-                if (!resp.IsSuccessStatusCode) { Logger.Log($"SelfUpdate: latest query failed status={resp.StatusCode}"); return; }
+                if (!resp.IsSuccessStatusCode) { Logger.Log($"SelfUpdate_Ds4Updater: latest query failed status={resp.StatusCode}"); return; }
 
                 var release = resp.Content.ReadFromJsonAsync<GitHubRelease>().GetAwaiter().GetResult();
-                if (release == null || string.IsNullOrEmpty(release.tag_name)) { Logger.Log("SelfUpdate: no release info"); return; }
+                if (release == null || string.IsNullOrEmpty(release.tag_name)) { Logger.Log("SelfUpdate_Ds4Updater: no release info"); return; }
 
                 string latestTag = release.tag_name.TrimStart('v');
-                Logger.Log($"SelfUpdate: latestTag={latestTag}");
+                Logger.Log($"SelfUpdate_Ds4Updater: latestTag={latestTag}");
                 // determine current exe/dll version
                 string fileName = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name + ".exe";
                 string exeFilePath = Path.Combine(AppContext.BaseDirectory, fileName);
@@ -309,8 +305,8 @@ namespace DS4Updater
                 }
                 catch { }
 
-                Logger.Log($"SelfUpdate: exeFilePath={exeFilePath} exists={File.Exists(exeFilePath)}");
-                try { Logger.Log($"SelfUpdate: detected currentVersion raw='{currentVersion}'"); } catch { }
+                Logger.Log($"SelfUpdate_Ds4Updater: exeFilePath={exeFilePath} exists={File.Exists(exeFilePath)}");
+                try { Logger.Log($"SelfUpdate_Ds4Updater: detected currentVersion raw='{currentVersion}'"); } catch { }
 
                 // Normalize version strings to first three numeric components for reliable comparison
                 static string NormalizeVersion(string v)
@@ -324,23 +320,23 @@ namespace DS4Updater
 
                 string normLatest = NormalizeVersion(latestTag);
                 string normCurrent = NormalizeVersion(currentVersion);
-                Logger.Log($"SelfUpdate: normalized latest={normLatest} current={normCurrent}");
+                Logger.Log($"SelfUpdate_Ds4Updater: normalized latest={normLatest} current={normCurrent}");
 
                 bool needUpdate = false;
                 bool parsedLatest = Version.TryParse(normLatest, out var vLatest);
                 bool parsedCurrent = Version.TryParse(normCurrent, out var vCurrent);
                 if (parsedLatest && parsedCurrent)
                 {
-                    Logger.Log($"SelfUpdate: parsed vLatest={vLatest} vCurrent={vCurrent}");
+                    Logger.Log($"SelfUpdate_Ds4Updater: parsed vLatest={vLatest} vCurrent={vCurrent}");
                     needUpdate = vLatest > vCurrent;
                 }
                 else
                 {
-                    Logger.Log($"SelfUpdate: version parse failed parsedLatest={parsedLatest} parsedCurrent={parsedCurrent} normLatest={normLatest} normCurrent={normCurrent}");
+                    Logger.Log($"SelfUpdate_Ds4Updater: version parse failed parsedLatest={parsedLatest} parsedCurrent={parsedCurrent} normLatest={normLatest} normCurrent={normCurrent}");
                     needUpdate = !string.Equals(normLatest, normCurrent, StringComparison.OrdinalIgnoreCase);
                 }
 
-                Logger.Log($"SelfUpdate: needUpdate={needUpdate}");
+                Logger.Log($"SelfUpdate_Ds4Updater: needUpdate={needUpdate}");
 
                 // If the executable or dll in the exe dir already matches or exceeds the latest, skip update
                 try
@@ -352,27 +348,27 @@ namespace DS4Updater
                     if (!string.IsNullOrEmpty(observedVersion))
                     {
                         var normObserved = NormalizeVersion(observedVersion);
-                        Logger.Log($"SelfUpdate: observed on-disk version={normObserved}");
+                        Logger.Log($"SelfUpdate_Ds4Updater: observed on-disk version={normObserved}");
                         if (Version.TryParse(normLatest, out var vL) && Version.TryParse(normObserved, out var vObs))
                         {
                             if (vObs >= vL)
                             {
-                                Logger.Log($"SelfUpdate: on-disk version ({normObserved}) >= latest ({normLatest}); skipping self-update");
+                                Logger.Log($"SelfUpdate_Ds4Updater: on-disk version ({normObserved}) >= latest ({normLatest}); skipping self-update");
                                 return;
                             }
                         }
                         else if (string.Equals(normObserved, normLatest, StringComparison.OrdinalIgnoreCase))
                         {
-                            Logger.Log($"SelfUpdate: on-disk version equals latest; skipping self-update");
+                            Logger.Log($"SelfUpdate_Ds4Updater: on-disk version equals latest; skipping self-update");
                             return;
                         }
                     }
                 }
-                catch (Exception ex) { Logger.LogException(ex, "SelfUpdate_ObservedVersionCheck"); }
+                catch (Exception ex) { Logger.LogException(ex, "SelfUpdate_Ds4Updater_ObservedVersionCheck"); }
 
                 if (!needUpdate)
                 {
-                    Logger.Log($"SelfUpdate: no update required (current={currentVersion}, latest={latestTag})");
+                    Logger.Log($"SelfUpdate_Ds4Updater: no update required (current={currentVersion}, latest={latestTag})");
                     return;
                 }
 
@@ -393,7 +389,7 @@ namespace DS4Updater
 
                 if (string.IsNullOrEmpty(downloadUrl))
                 {
-                    Logger.Log("SelfUpdate: no zip asset found in latest release (only zip supported)");
+                    Logger.Log("SelfUpdate_Ds4Updater: no zip asset found in latest release (only zip supported)");
                     return;
                 }
 
@@ -403,7 +399,7 @@ namespace DS4Updater
                 Directory.CreateDirectory(updateFilesDir);
                 string newUpdaterPath = Path.Combine(updateFilesDir, "DS4Updater.exe");
 
-                Logger.Log($"SelfUpdate: downloading new updater asset {assetName} from {downloadUrl}");
+                Logger.Log($"SelfUpdate_Ds4Updater: downloading new updater asset {assetName} from {downloadUrl}");
                 using (var httpResp = client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult())
                 {
                     httpResp.EnsureSuccessStatusCode();
@@ -451,7 +447,7 @@ namespace DS4Updater
                             {
                                 var name = Path.GetFileName(filePath);
                                 var dest = Path.Combine(updateFilesDir, name);
-                                try { File.Copy(filePath, dest, true); File.Delete(filePath); } catch (Exception ex) { Logger.LogException(ex, "SelfUpdate_MoveFile"); }
+                                try { File.Copy(filePath, dest, true); File.Delete(filePath); } catch (Exception ex) { Logger.LogException(ex, "SelfUpdate_Ds4Updater_MoveFile"); }
                             }
 
                             // Clean up temp extract dir
@@ -464,7 +460,7 @@ namespace DS4Updater
                     }
                 }
 
-                // Create batch to replace current exe after this process exits, then restart with same args
+                // Create batch to replace current exe after this process exits (SelfUpdate_Ds4Updater), then restart with same args
                 string tempBat = Path.Combine(Path.GetTempPath(), $"UpdateReplacer_{Guid.NewGuid()}.bat");
                 string currentExe = Path.Combine(exedirpath, fileName);
                 string quotedCurrent = "\"" + currentExe + "\"";
@@ -513,7 +509,7 @@ namespace DS4Updater
                     w.WriteLine($"del /f /q %~f0 > nul 2>&1");
                 }
 
-                Logger.Log($"SelfUpdate: starting replacer batch {tempBat} and exiting");
+                Logger.Log($"SelfUpdate_Ds4Updater: starting replacer batch {tempBat} and exiting");
                 var psi = new ProcessStartInfo(tempBat) { UseShellExecute = true, WorkingDirectory = exedirpath };
                 // Prevent Exit handler from removing Update Files so batch can access the downloaded assets
                 try { skipUpdateFilesCleanupOnExit = true; } catch { }
@@ -524,7 +520,7 @@ namespace DS4Updater
             }
             catch (Exception ex)
             {
-                Logger.LogException(ex, "TrySelfUpdateAndRestartIfNeeded");
+                Logger.LogException(ex, "TrySelfUpdateAndRestartIfNeeded_Ds4Updater");
             }
         }
     }
