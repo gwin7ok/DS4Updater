@@ -42,6 +42,10 @@ namespace DS4Updater
     /// </summary>
     public partial class MainWindow : Window
     {
+        // Cache for latest-version checks
+        private Version _latestVersionCache = new Version(0, 0, 0);
+        private bool? _newerVersionAvailableCache = null;
+
         private const string CUSTOM_EXE_CONFIG_FILENAME = "custom_exe_name.txt";
         //WebClient wc = new WebClient(), subwc = new WebClient();
         private HttpClient wc = new HttpClient();
@@ -792,6 +796,17 @@ namespace DS4Updater
                     UpdaterResult.ExitCode = 0;
                     UpdaterResult.Message = $"updated:{newversion}";
                     Logger.Log($"Update success: newversion={newversion}");
+                    // If updater was launched with auto-launch intent, mark for AutoOpenDS4 on App.Exit.
+                    // If user clicked the Run button (BtnOpenDS4) we explicitly set App.openingDS4W = false there to avoid double-start.
+                    try
+                    {
+                        App.openingDS4W = this.autoLaunchDS4W;
+                        Logger.Log($"Setting App.openingDS4W={App.openingDS4W} based on autoLaunchDS4W={this.autoLaunchDS4W}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogException(ex, "SetOpeningDS4W");
+                    }
                 }
                 else if (File.Exists(Path.Combine(ds4WindowsDir, "DS4Windows.exe")) || File.Exists(Path.Combine(ds4WindowsDir, "DS4Tool.exe")))
                 {
@@ -940,26 +955,74 @@ namespace DS4Updater
                 if (File.Exists(exe))
                 {
                     Util.StartProcessDetached(exe, runAsAdmin, ds4WindowsDir);
-                }
-                else
-                {
-                    // Open folder via shell (non-exe)
-                    Util.StartProcessDetached(ds4WindowsDir, false, ds4WindowsDir);
-                }
+                    }
+                    else
+                    {
+                        // Open folder via shell (non-exe)
+                        Util.StartProcessDetached(ds4WindowsDir, false, ds4WindowsDir);
+                    }
 
-                App.openingDS4W = true;
-                this.Close();
+                    // Process already started directly; avoid triggering App.Exit auto-launch to prevent double-start
+                    App.openingDS4W = false;
+                    this.Close();
             }
             catch (Exception ex)
             {
                 Logger.LogException(ex, "BtnOpenDS4_Click");
                 try { Process.Start(Path.Combine(ds4WindowsDir, "DS4Windows.exe")); } catch { }
-                App.openingDS4W = true;
+                App.openingDS4W = false;
                 this.Close();
             }
         }
 
         // Auto-open helper removed; Run action now requires user to click the Run button.
+
+        // Check GitHub releases latest for a newer version than the current installed one.
+        // This follows the reference logic provided by the user; SkipVersion behavior is intentionally omitted.
+        public bool CheckNewerVersionExists(out Version latest, bool allowCached = true)
+        {
+            latest = new Version(0, 0, 0);
+
+            // Parse current installed version
+            if (!Version.TryParse(version?.Replace(',', '.'), out var currentVersion)) return false;
+
+            // Use cache to reduce API calls
+            if (allowCached && _newerVersionAvailableCache.HasValue)
+            {
+                latest = _latestVersionCache;
+                return _newerVersionAvailableCache.Value;
+            }
+
+            try
+            {
+                if (string.IsNullOrEmpty(repoConfig?.DS4WindowsApiLatestUrl)) return false;
+
+                var resp = wc.GetAsync(repoConfig.DS4WindowsApiLatestUrl).GetAwaiter().GetResult();
+                if (!resp.IsSuccessStatusCode) return false;
+
+                var gh = resp.Content.ReadFromJsonAsync<DS4Updater.Dtos.GitHubRelease>().GetAwaiter().GetResult();
+                if (gh == null || string.IsNullOrEmpty(gh.tag_name)) return false;
+
+                string candidate = gh.tag_name.TrimStart('v').Replace(',', '.');
+                if (!Version.TryParse(candidate, out latest)) return false;
+
+                if (currentVersion < latest)
+                {
+                    _latestVersionCache = latest;
+                    _newerVersionAvailableCache = true;
+                    return true;
+                }
+
+                _latestVersionCache = latest;
+                _newerVersionAvailableCache = false;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogException(ex, "CheckNewerVersionExists");
+                return false;
+            }
+        }
     }
 }
 
