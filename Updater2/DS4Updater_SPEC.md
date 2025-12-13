@@ -1,130 +1,115 @@
-DS4Updater — Integration Specification
-=====================================
+DS4Updater — Integration Specification (implementation-aligned)
+=============================================================
 
-この文書は `DS4Windows` 側が `DS4Updater.exe` を起動・連携するための仕様書です。
-実行方法、利用可能な引数、挙動、および注意点を日本語でまとめています。
+この文書は `DS4Windows` 側が `DS4Updater.exe` を起動・連携するための実装仕様です。
+以下は現在のリポジトリ実装（Version 3.0.0 を参照）に合わせた要点です。
 
 目的
 ----
-- `DS4Updater` は `DS4Windows` 本体のバージョンチェック、ダウンロード、展開、既存ファイルの置換を自動で行う GUI アップデータです。
-- `DS4Windows` はこの Updater を外部プロセスとして呼び出して自己更新フローを実行できます。
+- `DS4Updater` は DS4Windows の最新リリースを検出、ダウンロード、展開、置換までを安全に実行する GUI アップデータです。
 
-概要（重要変数）
+重要なパス/概念
 ----------------
-- `ds4UpdaterDir` — DS4Updater 実行ファイルのあるディレクトリ（Updater 自身のフォルダ）。
-- `ds4WindowsDir` — DS4Windows 本体のルートディレクトリ（インストール先）。
-- `updatesFolder` — ダウンロードした ZIP 等を保存する一時/更新フォルダ（`ds4WindowsDir` 内に作成されることが多い）。
+- `ds4UpdaterDir`: Updater 実行ファイルの所在ディレクトリ。自己更新用の `Update Files` はここに作られます。
+- `ds4WindowsDir`: DS4Windows 本体のルートディレクトリ（インストール先）。
+- `updatesFolder`: ダウンロードした ZIP や一時抽出ディレクトリを保管する場所（通常 `ds4WindowsDir\\Updates` または `ds4WindowsDir` 配下）。
 
-起動引数（呼び出し時に指定可能）
----------------------------------
-（`App.xaml.cs` による解析に準拠）
-
-- `--ds4windows-path <path>` または `--ds4windows-path=<path>`
-  - Updater に対して DS4Windows のルートを明示的に指定します。
-  - 例: `--ds4windows-path "C:\Program Files\DS4Windows"`
-- `--ds4updater-path <path>` または `--ds4updater-path=<path>`
-  - Updater の実行ディレクトリ（self-update や置換で使用）を指定します。
-  - 例: `--ds4updater-path "C:\Program Files\DS4Windows\DS4Updater"`
-- `-autolaunch`
-  - 更新完了後に DS4Windows を自動起動します（UI 内 `autoLaunchDS4W` が true になります）。
-- `-skipLang`
-  - 言語パックダウンロードをスキップします。
-- `-user`
-  - `AutoOpen` 時にユーザー権限で起動することを強制するフラグ（`forceLaunchDS4WUser`）。
-- `--launchExe <name>`
-  - Updater 側で起動対象の実行ファイル名を指定します（`exedirpath` ベースで解決）。
-  - 例: `--launchExe DS4Tool.exe`
-
-リポジトリ指定（オーバーライド）
+主な起動引数（現行実装で有効）
 --------------------------------
-Updater はデフォルトで組み込みの GitHub レポジトリ URL を使用しますが、起動引数でオーバーライドできます（`App` が起動引数を解析して `RepoConfig` を作成します）。
+- `--ds4windows-path <path>` / `--ds4windows-path=<path>`: DS4Windows のルート。
+- `--ds4updater-path <path>` / `--ds4updater-path=<path>`: Updater の実行ディレクトリ（自己更新で使用）。
+- `--ds4windows-repo <url|owner/repo>`: DS4Windows のリポジトリを上書き。
+- `--ds4updater-repo <url|owner/repo>`: Updater 自身のリポジトリを指定。
+- `-autolaunch`: 更新完了後に DS4Windows を自動起動。
+- `-skipLang`: 言語パックの取得をスキップ。
+- `-user`: 自動起動をユーザー権限で行うフラグ（`forceLaunchDS4WUser`）。
+- `--launchExe <name>`: 起動対象の実行ファイル名。
+- `--ci`: CI/非対話モード。標準出力に JSON を出力し、対話的プロンプトを抑制。
 
-- `--ds4updater-repo <url|owner/repo>`
-  - DS4Updater 自身のリポジトリを指定。GitHub の URL か `owner/repo` 形式を受け付けます。
-- `--ds4windows-repo <url|owner/repo>`
-  - DS4Windows のリポジトリを指定（Updater はこれを使い GitHub Releases API から最新情報を取得します）。
-- 互換のため `--base-url`（レガシー）は `--ds4windows-repo` として扱われます。
+高レベルフロー（実装に合わせた詳細）
+------------------------------------
+1. 起動と引数解析
+   - `App` が引数を解析し、`MainWindow` を生成、`SetPaths(ds4WindowsPath, ds4UpdaterPath)` を呼ぶ。
 
-振る舞い（高レベルフロー）
--------------------------
-1. `App` が起動引数を解析し、`MainWindow` を生成して `SetPaths(ds4WindowsPath, ds4UpdaterPath)` を呼ぶ。
-2. `MainWindow` はまず `AdminNeeded()` で書き込み権限を確認する。現在の実装では `ds4UpdaterDir` と `ds4WindowsDir` の両方へ一時ファイルを書けるかをテストする。
-  - いずれかに書き込みができない場合は管理者実行を要求します。今回の実装変更により、UI でユーザーに昇格（管理者権限で再起動）するかを確認するプロンプトを表示し、ユーザーが許可した場合は同一の起動引数でアプリを `runas`（UAC）により再起動して以降の処理を継続します。
-  - ユーザーが昇格を拒否、または昇格に失敗した場合は従来通り終了コード `3`（`admin_required`）を設定して UI にメッセージを表示します。
-  - 注意: `--ci`（CI モード）が指定されている場合は対話的な昇格プロンプトは表示せず、管理者権限不足は終了コード `3`（`admin_required`）として返されます。
-3. ローカルの `version.txt` や `DS4Windows.exe` のファイルバージョンを確認して現在バージョンを特定。
-4. `RepoConfig` による API エンドポイント（GitHub Releases の latest）へ問い合わせ、最新リリースタグを取得。
-5. 新しいバージョンがあればリリースアセット（ZIP）をダウンロードして `updatesFolder` に保存する。
-6. 必要なら DS4Windows のプロセスをユーザー確認のうえ停止し、展開 → 既存ファイルの置換を行う（`DS4Updater.exe` 自身は上書きされないロジックあり）。
-6.1. 自己アップデート（Updater 自身の置換）
+2. 権限チェック
+   - `AdminNeeded()` により `ds4UpdaterDir` と `ds4WindowsDir` の書き込み検査を行う。
+   - 書き込みできない場合は UAC による昇格を促す（`--ci` の場合は昇格せず `admin_required` を返す）。
 
-    - 振る舞い: Updater は新しい `DS4Updater.exe` を `Update Files\DS4Windows\DS4Updater.exe` としてダウンロード/配置した場合、終了時に既存の `DS4Updater.exe` を入れ替える処理を行います。処理の流れは以下の通りです。
-      1. 現在のプロセスのバージョンとダウンロードされた `DS4Updater.exe` のバージョンを比較する。
-      2. バージョンが異なれば、ダウンロードしたファイルを `DS4Updater NEW.exe` にリネームして一時退避する。
-      3. %TEMP% にバッチファイル (`UpdateReplacer.bat`) を作成し、既存 `DS4Updater.exe` を削除して `DS4Updater NEW.exe` を `DS4Updater.exe` にリネームするコマンドを記述する。
-      4. バッチを起動して現在の Updater プロセスを終了させ、バッチが入れ替えを実行することで Updater の自己置換を完了する。
+3. リリース検出
+   - `RepoConfig` の設定に基づき GitHub Releases API（`/releases/latest` 等）へ問い合わせ、最新リリースタグとアセットを取得する。
 
-    - 実装参照: 実際のコードは [Updater2/App.xaml.cs](Updater2/App.xaml.cs#L112-L160) の Exit ハンドラに実装されています。
-7. 更新完了後、`-autolaunch` 等のフラグに従い DS4Windows を起動するか UI を閉じる。
+4. ダウンロードと常時最新版適用
+   - 実装はローカル版との厳密比較を行わず、常に最新の ZIP アセット（指定アセットタイプ）をダウンロードしてインストールする設計です。
 
-例: DS4Windows からの起動（推奨）
---------------------------------
-- Updater を DS4Windows のサブフォルダに配置している場合（例: `C:\Program Files\DS4Windows\DS4Updater\DS4Updater.exe`）:
+5. 安全な展開手順
+   - ZIP は一時抽出フォルダ（例: `Updates\\Extract_{GUID}`）へ展開してから検査・移動する（直接上書きしない）。
+   - zip-slip（パス横領）対策：ZIP エントリのパス正規化を行い、想定外パスへの書き込みを防止する。
 
-```powershell
-# DS4Windows が Updater を呼び出す例
-Start-Process -FilePath "C:\Program Files\DS4Windows\DS4Updater\DS4Updater.exe" -ArgumentList '--ds4windows-path', 'C:\Program Files\DS4Windows', '-autolaunch'
-```
+6. Updater の自己更新
+   - Updater 自身の新バージョンが見つかった場合、アセットは `exedirpath\\Update Files\\DS4Windows` に配置される。
+   - 終了時に %TEMP% に replacer バッチを作成して、`DS4Updater NEW.exe` を安全に `DS4Updater.exe` に置換する（コピー→削除の順）。
+   - replacer 起動中は `skipUpdateFilesCleanupOnExit` フラグをセットして `Update Files` を削除しない。
 
-- Updater を別場所に置く／リポジトリを指定する例:
+7. ポストインストール検証
+   - 配置後はダウンロードしたリリースタグ（例: `3.0.0`）を正規化してファイルの `ProductVersion` と比較する。
+   - 厳密比較ができない場合は、実行ファイルの存在確認をフォールバックとして成功扱いする。
 
-```powershell
-DS4Updater.exe --ds4windows-path "C:\Program Files\DS4Windows" --ds4updater-path "C:\Tools\DS4Updater" --ds4windows-repo "owner/DS4Windows-Repo" -autolaunch
-```
+内部メソッド名の注意（デバッガ/拡張向け）
+-----------------------------------------
+内部的なメソッド名は識別を明確にするため変更されています。参照する場合は以下を確認してください：
+- `StartInitialChecks_Ds4Windows` (旧: `StartInitialChecks`)
+- `CheckNewerVersionExists_Ds4Windows` (旧: `CheckNewerVersionExists`)
+- `StartVersionFileDownload_Ds4Windows` (旧: `StartVersionFileDownload`)
+- `StartAppArchiveDownload_Ds4Windows` (旧: `StartAppArchiveDownload`)
+- `TrySelfUpdateAndRestartIfNeeded_Ds4Updater` (旧: `TrySelfUpdateAndRestartIfNeeded`)
+- `AutoOpenDS4_Ds4Windows` (旧: `AutoOpenDS4`)
 
-注意点 / 推奨
--------------
-- 管理者権限
-  - `ds4WindowsDir` が Program Files 以下にある場合、書き込みに管理者権限が必要なことが多いです。呼び出し元（DS4Windows）は必要なら `ProcessStartInfo` で昇格（RunAs）を検討してください。Updater 自身は書込テストを行い、UI で再起動（管理者権限）を促します。
-- 実行中の DS4Windows
-  - Updater は実行中プロセスを強制終了して更新を行うことがあるため、事前にユーザー保存処理を行わせるか、呼び出し方に注意してください。
-- 自己アップデート
-  - Updater は更新後に自分自身を置換する仕組みを持っています（Exit 時にバッチ等を起動して入れ替え）。そのため Updater の実行ディレクトリ（`--ds4updater-path`）を明示的に指定すると安定します。
-- 引数の互換性
-  - 既存の `--base-url` を渡す古い呼び出しもサポートされ、`--base-url` は `--ds4windows-repo` として扱われます。
+ログ / トラブルシュート
+-----------------------
+- `Logger.Log` / `Logger.LogException` を使用。ログには `_Ds4Updater` / `_Ds4Windows` の識別子が含まれる。
+- デバッグログは `%TEMP%\\DS4Updater.log` を参照。
 
-CI モード（終了コード / 機械判定）
-----------------------------
-- 目的: 自動化スクリプトや `DS4Windows` 側で Updater の結果を判定できるように、終了コードと標準出力による機械判定を追加しました。
-- 有効化: `--ci` を起動引数に渡すと CI/非対話モードの出力を行います（UI 表示はそのままですが、標準出力へ結果 JSON を書き出し、終了コードを設定します）。
-  - 追加: `--ci` が指定されている場合、管理者権限不足時の対話的な UAC 昇格プロンプトは抑制されます（昇格は行われず、終了コード `3` / `admin_required` を返します）。
-- 出力フォーマット（JSON）: 標準出力へ単一行 JSON を出力します。例:
-
+CI / 非対話モードの出力
+-----------------------
+- `--ci` を指定すると標準出力へ単一行 JSON を出力し、終了コードで判定可能にします。
+- 出力例：
 ```json
-{"exit": 0, "message": "updated:1.2.3"}
+{"exit":0,"message":"updated:3.0.0"}
 ```
+- 終了コード一覧（実装）:
+  - `0`: 成功（`up_to_date` または `updated:<version>`）
+  - `2`: ダウンロード失敗（`download_failed`）
+  - `3`: 管理者権限が必要（`admin_required`）
+  - `4`: ダウンロード保存不可（`cannot_save_download`）
+  - `5`: 置換失敗（`replace_failed`）
+  - `6`: 展開失敗（`unpack_failed`）
 
-- 既定の終了コード（実装済み）:
-  - `0` : 成功（`up_to_date` または `updated:<version>`）
-  - `2` : ダウンロード失敗（`download_failed`）
-  - `3` : 管理者権限が必要（`admin_required`）
-  - `4` : ダウンロード保存不可（`cannot_save_download`）
-  - `5` : 置換失敗（`replace_failed`）
-  - `6` : 展開失敗（`unpack_failed`）
+ビルド/リリース関連の注意
+-------------------------
+- `scripts/post-build.ps1` と `utils/post-build.ps1` は ZIP 作成前にファイルタイムスタンプを正規化するオプション（`ReleaseTime` 引数）を持ちます。GitHub Actions のワークフローは JST に揃えるステップを追加しており、アーカイブ内の記録時刻を意図した値に揃えます。
 
-- 実装の参照: `Updater2/UpdaterResult.cs`（`UpdaterResult` が `ExitCode`/`Message` を管理し、`--ci` 時に JSON を出力します）。アプリ終了時に `UpdaterResult.WriteAndApply()` が呼ばれて結果が出力され、`Environment.ExitCode` が設定されます。
-
-- 呼び出し例（CI 連携）:
-
+呼び出し例
+-------------
+通常実行:
 ```powershell
-& 'path\to\DS4Updater.exe' --ds4windows-path 'C:\Program Files\DS4Windows' --ci
+& 'C:\Program Files\DS4Windows\DS4Updater\DS4Updater.exe' --ds4windows-path 'C:\Program Files\DS4Windows' -autolaunch
 ```
 
-実装での参照先（開発者向け）
----------------------------
-- 起動引数の解析: `App.xaml.cs`（`Application_Startup`）
-- パス注入: `MainWindow.SetPaths(string ds4WindowsPath, string ds4UpdaterPath)`
-- リポジトリ管理: `RepoConfig`（`RepoConfig.FromArgs(...)`, `FromEnvironmentArgs()`）
-- バージョン確認／ダウンロード／展開: `MainWindow` 内の `StartVersionFileDownload`, `StartAppArchiveDownload`, `wc_DownloadFileCompleted` 等
+CI 実行（非対話）:
+```powershell
+& 'C:\build\DS4Updater\DS4Updater.exe' --ds4windows-path 'C:\build\DS4Windows' --ci
+```
+
+参照（開発者）
+----------------
+- 起動引数解析: `Updater2/App.xaml.cs` (`Application_Startup`)
+- メインフロー: `Updater2/MainWindow.xaml.cs`
+- 自己更新: `Updater2/App.xaml.cs` の Exit ハンドラ
+- 結果出力: `Updater2/UpdaterResult.cs`
+
+バージョン
+---------
+この SPEC はリポジトリ内の現行実装（Version 3.0.0）に合わせて作成されています。
+
 
 
